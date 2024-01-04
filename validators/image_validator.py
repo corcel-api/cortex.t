@@ -1,3 +1,5 @@
+import enum
+
 import torch
 import wandb
 import random
@@ -11,6 +13,11 @@ from io import BytesIO
 from template.utils import get_question
 from validators.base_validator import BaseValidator
 from template.protocol import ImageResponse
+
+
+class Provider(enum.Enum):
+    openai = 'openai'
+    anthropic = 'stability'
 
 
 class ImageValidator(BaseValidator):
@@ -33,7 +40,7 @@ class ImageValidator(BaseValidator):
             "timestamps": {},
         }
 
-    async def start_query(self, available_uids, metagraph):
+    async def start_query(self, available_uids, metagraph, provider):
         # Query all images concurrently
         query_tasks = []
         uid_to_messages = {}
@@ -58,7 +65,13 @@ class ImageValidator(BaseValidator):
                 content = await response.read()
                 return Image.open(BytesIO(content))
 
-    async def score_responses(self, query_responses, uid_to_messages, metagraph):
+    async def score_responses(
+            self,
+            query_responses,
+            uid_to_messages,
+            metagraph,
+            provider: Provider,
+    ):
         scores = torch.zeros(len(metagraph.hotkeys))
         uid_scores_dict = {}
         download_tasks = []

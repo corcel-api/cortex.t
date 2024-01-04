@@ -3,7 +3,7 @@ import concurrent
 import itertools
 import traceback
 import random
-from typing import Tuple
+from typing import Tuple, Union
 
 import bittensor as bt
 import torch
@@ -11,6 +11,7 @@ import wandb
 from bittensor.btlogging import logger
 
 from template.protocol import IsAlive
+from validators import text_validator, image_validator
 from validators.text_validator import TextValidator
 
 iterations_per_set_weights = 12
@@ -79,7 +80,8 @@ class WeightSetter:
 
                 available_uids = await self.get_available_uids()
                 selected_validator = self.select_validator(steps_passed)
-                scores, _ = await self.process_modality(selected_validator, available_uids)
+                provider = self.select_provider(selected_validator, steps_passed)
+                scores, _ = await self.process_modality(selected_validator, available_uids, provider)
                 self.total_scores += scores
 
                 steps_since_last_update = steps_passed % iterations_per_set_weights
@@ -92,6 +94,10 @@ class WeightSetter:
                     )
 
                 await asyncio.sleep(0.5)
+
+    def select_provider(self, validator, steps_passed) -> Union[text_validator.Provider, image_validator.Provider]:
+        # TODO: implement
+        return text_validator.Provider.openai
 
     def select_validator(self, steps_passed):
         return self.text_vali if steps_passed % 5 in (0, 1, 2) else self.image_vali
@@ -126,10 +132,11 @@ class WeightSetter:
         random.shuffle(list_)
         return list_
 
-    async def process_modality(self, selected_validator, available_uids):
+    async def process_modality(self, selected_validator, available_uids,
+                               provider: Union[text_validator.Provider, image_validator.Provider]):
         uid_list = self.shuffled(list(available_uids.keys()))
         bt.logging.info(f"starting {selected_validator.__class__.__name__} get_and_score for {uid_list}")
-        scores, uid_scores_dict, wandb_data = await selected_validator.get_and_score(uid_list, self.metagraph)
+        scores, uid_scores_dict, wandb_data = await selected_validator.get_and_score(uid_list, self.metagraph, provider)
         if self.config.wandb_on:
             wandb.log(wandb_data)
             bt.logging.success("wandb_log successful")
@@ -177,6 +184,7 @@ class WeightSetter:
         self,
         uid_to_response: dict[int, str],  # [(uid, response)]
         messages_dict: dict[int, str],
+        provider: text_validator.Provider,
     ):
         self.organic_scoring_tasks.add(asyncio.create_task(
             wait_for_coro_with_limit(
@@ -184,6 +192,7 @@ class WeightSetter:
                     query_responses=list(uid_to_response.items()),
                     uid_to_question=messages_dict,
                     metagraph=self.metagraph,
+                    provider=provider,
                 ),
                 scoring_organic_timeout
             )

@@ -120,7 +120,17 @@ async def test_synthetic_and_organic(aiohttp_client):
 
         client = await aiohttp_client(validator_app)
 
-        resp = await client.post('/text-validator/', headers={'access-key': 'hello'}, json={'4': organic_question_1})
+        resp = await client.post(
+            '/v2/text-validator/',
+            headers={
+                'Authorization': 'token hello',
+            },
+            json={
+                'content': organic_question_1,
+                'miner_uid': 4,
+                'provider': 'openai',
+            },
+        )
         resp_content = (await resp.content.read()).decode()
         assert resp_content == organic_answer_1
 

@@ -47,3 +47,18 @@ class Test(ActiveSubnetworkBaseTest):
         resp.raise_for_status()
         assert "cucumber" in resp.text
         print(resp.text)
+
+    def test_text_validator_v2(self):
+        resp = requests.post(
+            f'http://localhost:{VALIDATOR_PORT}/v2/text-validator/',
+            headers={'Authorization': 'token hello'},
+            json={
+                'content': 'please write a sentence using the word "cucumber"',
+                'provider': 'openai',
+                'miner_uid': 1,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        assert "cucumber" in resp.text
+        print(resp.text)

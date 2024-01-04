@@ -33,6 +33,6 @@ class BaseValidator(ABC):
     async def score_responses(self, responses):
         ...
 
-    async def get_and_score(self, available_uids, metagraph):
-        query_responses, uid_to_question = await self.start_query(available_uids, metagraph)
-        return await self.score_responses(query_responses, uid_to_question, metagraph)
+    async def get_and_score(self, available_uids, metagraph, provider):
+        query_responses, uid_to_question = await self.start_query(available_uids, metagraph, provider)
+        return await self.score_responses(query_responses, uid_to_question, metagraph, provider)

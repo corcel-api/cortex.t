@@ -1,4 +1,5 @@
 import asyncio
+import enum
 import random
 from typing import AsyncIterator, Tuple
 
@@ -9,6 +10,11 @@ from validators.base_validator import BaseValidator
 import template.reward
 from template.protocol import StreamPrompting
 from template.utils import call_openai, get_question
+
+
+class Provider(enum.Enum):
+    openai = 'openai'
+    anthropic = 'anthropic'
 
 
 class TextValidator(BaseValidator):
@@ -28,28 +34,38 @@ class TextValidator(BaseValidator):
             "timestamps": {},
         }
 
-    async def organic(self, metagraph, query: dict[str, list[dict[str, str]]]) -> AsyncIterator[tuple[int, str]]:
-        for uid, messages in query.items():
-            syn = StreamPrompting(messages=messages, model=self.model, seed=self.seed)
-            bt.logging.info(
-                f"Sending {syn.model} {self.query_type} request to uid: {uid}, "
-                f"timeout {self.timeout}: {syn.messages[0]['content']}"
-            )
-            self.wandb_data["prompts"][uid] = messages
-            responses = await self.dendrite(
-                metagraph.axons[uid],
-                syn,
-                deserialize=False,
-                timeout=self.timeout,
-                streaming=self.streaming,
-            )
+    async def organic(
+            self,
+            metagraph,
+            query: dict[str, list[dict[str, str]]],
+            provider: Provider,
+    ) -> AsyncIterator[tuple[int, str]]:
+        if provider == Provider.openai:
+            for uid, messages in query.items():
+                syn = StreamPrompting(messages=messages, model=self.model, seed=self.seed)
+                bt.logging.info(
+                    f"Sending {syn.model} {self.query_type} request to uid: {uid}, "
+                    f"timeout {self.timeout}: {syn.messages[0]['content']}"
+                )
+                self.wandb_data["prompts"][uid] = messages
+                responses = await self.dendrite(
+                    metagraph.axons[uid],
+                    syn,
+                    deserialize=False,
+                    timeout=self.timeout,
+                    streaming=self.streaming,
+                )
 
-            async for resp in responses:
-                if not isinstance(resp, str):
-                    continue
+                async for resp in responses:
+                    if not isinstance(resp, str):
+                        continue
 
-                bt.logging.trace(resp)
-                yield uid, resp
+                    bt.logging.trace(resp)
+                    yield uid, resp
+        elif provider == Provider.anthropic:
+            raise NotImplementedError(f'{provider=} is not supported')
+        else:
+            raise NotImplementedError(f'{provider=} is not supported')
 
     async def handle_response(self, uid: str, responses) -> tuple[str, str]:
         full_response = ""
@@ -65,7 +81,7 @@ class TextValidator(BaseValidator):
     async def get_question(self, qty):
         return await get_question("text", qty)
 
-    async def start_query(self, available_uids, metagraph) -> tuple[list, dict]:
+    async def start_query(self, available_uids, metagraph, provider) -> tuple[list, dict]:
         query_tasks = []
         uid_to_question = {}
         for uid in available_uids:
@@ -98,43 +114,49 @@ class TextValidator(BaseValidator):
         query_responses: list[tuple[int, str]],  # [(uid, response)]
         uid_to_question: dict[int, str],  # uid -> prompt
         metagraph: bt.metagraph,
+        provider: Provider,
     ) -> tuple[torch.Tensor, dict[int, float], dict]:
-        scores = torch.zeros(len(metagraph.hotkeys))
-        uid_scores_dict = {}
-        openai_response_tasks = []
+        if provider == Provider.openai:
+            scores = torch.zeros(len(metagraph.hotkeys))
+            uid_scores_dict = {}
+            openai_response_tasks = []
 
-        # Decide to score all UIDs this round based on a chance
-        will_score_all = self.should_i_score()
+            # Decide to score all UIDs this round based on a chance
+            will_score_all = self.should_i_score()
 
-        for uid, response in query_responses:
-            self.wandb_data["responses"][uid] = response
-            if will_score_all and response:
-                prompt = uid_to_question[uid]
-                openai_response_tasks.append((uid, self.call_openai(prompt)))
+            for uid, response in query_responses:
+                self.wandb_data["responses"][uid] = response
+                if will_score_all and response:
+                    prompt = uid_to_question[uid]
+                    openai_response_tasks.append((uid, self.call_openai(prompt)))
 
-        openai_responses = await asyncio.gather(*[task for _, task in openai_response_tasks])
+            openai_responses = await asyncio.gather(*[task for _, task in openai_response_tasks])
 
-        scoring_tasks = []
-        for (uid, _), openai_answer in zip(openai_response_tasks, openai_responses):
-            if openai_answer:
-                response = next(res for u, res in query_responses if u == uid)  # Find the matching response
-                task = template.reward.openai_score(openai_answer, response, self.weight)
-                scoring_tasks.append((uid, task))
+            scoring_tasks = []
+            for (uid, _), openai_answer in zip(openai_response_tasks, openai_responses):
+                if openai_answer:
+                    response = next(res for u, res in query_responses if u == uid)  # Find the matching response
+                    task = template.reward.openai_score(openai_answer, response, self.weight)
+                    scoring_tasks.append((uid, task))
 
-        scored_responses = await asyncio.gather(*[task for _, task in scoring_tasks])
+            scored_responses = await asyncio.gather(*[task for _, task in scoring_tasks])
 
-        for (uid, _), scored_response in zip(scoring_tasks, scored_responses):
-            if scored_response is not None:
-                scores[uid] = scored_response
-                uid_scores_dict[uid] = scored_response
-            else:
-                scores[uid] = 0
-                uid_scores_dict[uid] = 0
-            # self.wandb_data["scores"][uid] = score
+            for (uid, _), scored_response in zip(scoring_tasks, scored_responses):
+                if scored_response is not None:
+                    scores[uid] = scored_response
+                    uid_scores_dict[uid] = scored_response
+                else:
+                    scores[uid] = 0
+                    uid_scores_dict[uid] = 0
+                # self.wandb_data["scores"][uid] = score
 
-        if uid_scores_dict != {}:
-            bt.logging.info(f"text_scores is {uid_scores_dict}")
-        return scores, uid_scores_dict, self.wandb_data
+            if uid_scores_dict != {}:
+                bt.logging.info(f"text_scores is {uid_scores_dict}")
+            return scores, uid_scores_dict, self.wandb_data
+        elif provider == Provider.anthropic:
+            raise NotImplementedError(f'{provider=} is not supported')
+        else:
+            raise NotImplementedError(f'{provider=} is not supported')
 
 
 class TestTextValidator(TextValidator):
@@ -173,7 +195,12 @@ class TestTextValidator(TextValidator):
     async def query_miner(self, metagraph, uid, syn: StreamPrompting):
         return uid, await self.call_openai(syn.messages[0]['content'])
 
-    async def organic(self, metagraph, query: dict[str, list[dict[str, str]]]) -> AsyncIterator[tuple[int, str]]:
+    async def organic(
+        self,
+        metagraph,
+        query: dict[str, list[dict[str, str]]],
+        provider: Provider,
+    ) -> AsyncIterator[tuple[int, str]]:
         for uid, messages in query.items():
             for msg in messages:
                 yield uid, await self.call_openai(msg['content'])
