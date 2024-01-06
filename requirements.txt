@@ -1,16 +1,16 @@
 aiohttp==3.*
+anthropic==0.8.1
+anthropic_bedrock==0.5.8
 bittensor==6.*
+boto3==1.*
 datasets==2.*
 envparse==0.2.0
 openai>=1.3.2, ==1.*
 Pillow==10.*
+pyOpenSSL==23.*
 requests==2.*
 scikit-learn==1.*
+stability-sdk==0.8.5
 torch==2.*
 transformers==4.*
-wandb
-anthropic
-stability-sdk
-boto3
-anthropic_bedrock
-pyOpenSSL
+wandb==0.16.1

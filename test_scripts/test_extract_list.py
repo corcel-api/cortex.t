@@ -1,16 +1,13 @@
 import re
-import os
 import ast
 import math
-import json
-import wandb
 import random
 import asyncio
-import template
+from cortex_t import template
 import traceback
 import bittensor as bt
 
-from template import client
+from cortex_t.template import client
 
 
 instruct_questions = []

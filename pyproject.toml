@@ -1,0 +1,16 @@
+[project]
+name = "cortex_t"
+dynamic = ["dependencies"]
+requires-python = ">= 3.8"
+license = {text = "MIT License"}
+version = "3.0.7"
+
+[tool.setuptools]
+packages = ["cortex_t"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[project.scripts]
+cortex-t-validator = "cortex_t.validators.validator:main"
+cortex-t-miner = "cortex_t.miner.miner:main"

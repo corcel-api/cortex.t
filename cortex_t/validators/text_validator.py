@@ -1,14 +1,14 @@
 import asyncio
 import random
-from typing import AsyncIterator, Tuple
+from typing import AsyncIterator
 
 import bittensor as bt
 import torch
-from base_validator import BaseValidator
+from cortex_t.validators.base_validator import BaseValidator
 
-import template.reward
-from template.protocol import StreamPrompting
-from template.utils import call_openai, get_question, call_anthropic
+import cortex_t.template.reward
+from cortex_t.template.protocol import StreamPrompting
+from cortex_t.template.utils import call_openai, get_question, call_anthropic
 
 
 class TextValidator(BaseValidator):
@@ -71,12 +71,14 @@ class TextValidator(BaseValidator):
     async def get_question(self, qty):
         return await get_question("text", qty)
 
+    def get_random_provider(self):
+        return random.choice(["OpenAI", "Anthropic"])
+
     async def start_query(self, available_uids, metagraph) -> tuple[list, dict]:
         query_tasks = []
         uid_to_question = {}
         # Randomly choose the provider based on specified probabilities
-        providers = ["OpenAI"] * 5 + ["Anthropic"] * 5
-        self.provider = random.choice(providers)
+        self.provider = self.get_random_provider()
 
         if self.provider == "Anthropic":
             # bedrock models = ["anthropic.claude-v2:1", "anthropic.claude-instant-v1", "anthropic.claude-v1", "anthropic.claude-v2"]
@@ -107,9 +109,13 @@ class TextValidator(BaseValidator):
         bt.logging.info(f"Random Number: {random_number}, Will score text responses: {will_score_all}")
         return will_score_all
 
+    async def call_openai(self, prompt: str) -> str:
+        return await call_openai([{'role': 'user', 'content': prompt}], 0, self.temperature, self.model,
+                                 self.seed, self.max_tokens)
+
     async def call_api(self, prompt: str, provider: str) -> str:
         if provider == "OpenAI":
-            return await call_openai([{'role': 'user', 'content': prompt}], self.temperature, self.model, self.seed, self.max_tokens)
+            return await self.call_openai(prompt)
         elif provider == "Anthropic":
             return await call_anthropic(prompt, self.temperature, self.model, self.max_tokens, self.top_p, self.top_k)
         else:
@@ -140,7 +146,7 @@ class TextValidator(BaseValidator):
         for (uid, _), api_answer in zip(response_tasks, api_responses):
             if api_answer:
                 response = next(res for u, res in query_responses if u == uid)  # Find the matching response
-                task = template.reward.api_score(api_answer, response, self.weight)
+                task = cortex_t.template.reward.api_score(api_answer, response, self.weight)
                 scoring_tasks.append((uid, task))
 
         scored_responses = await asyncio.gather(*[task for _, task in scoring_tasks])
@@ -179,6 +185,9 @@ class TestTextValidator(TextValidator):
         self.openai_prompt_to_contents = openai_prompt_to_contents
         self._openai_prompts_used = dict.fromkeys(self.openai_prompt_to_contents, -1)
         self._questions_retrieved = -1
+
+    def get_random_provider(self):
+        return "OpenAI"
 
     def should_i_score(self):
         return True

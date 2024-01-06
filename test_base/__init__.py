@@ -109,6 +109,7 @@ class ActiveSubnetworkBaseTest(abc.ABC):
         cls.wait_for_process_start('validator', cls.check_if_validator_is_up, cls.validator_process)
         logger.info('Waiting for miner to start')
         cls.wait_for_process_start('miner', cls.check_if_miner_is_up, cls.miner_process)
+        logger.info('Miner and validator started')
         yield
         if cls.miner_process:
             logger.info('Killing miner')

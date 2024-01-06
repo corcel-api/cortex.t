@@ -7,7 +7,8 @@ import bittensor
 import pytest
 import torch
 
-from validators.validator import main, validator_app
+from cortex_t.validators import weight_setter
+from cortex_t.validators.validator import main, validator_app
 
 hotkeys = os.environ.get('CORTEXT_MINER_ADDITIONAL_WHITELIST_VALIDATOR_KEYS', '').split(',')
 
@@ -100,7 +101,8 @@ expected_scores_after_one_iteration = torch.tensor([1.0, 0.3333333432674408, 0.3
 @pytest.mark.asyncio
 async def test_synthetic_and_organic(aiohttp_client):
     with (mock.patch.object(bittensor.subtensor, 'set_weights') as set_weights_mock,
-          mock.patch.object(bittensor.metagraph, 'hotkeys', new=hotkeys)):
+          mock.patch.object(bittensor.metagraph, 'hotkeys', new=hotkeys),
+          mock.patch.object(weight_setter, 'SYNTHETIC_SCORING_LOOP_SLEEP', 0.1)):
         sys.argv = ['validator.py', '--netuid', '49', '--subtensor.network', 'test', '--wallet.name', 'validator',
                     '--wallet.hotkey', 'default']
         main(run_aio_app=False, test=True)

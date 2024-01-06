@@ -9,13 +9,12 @@ import bittensor as bt
 import torch
 import wandb
 
-from template.protocol import IsAlive
-from text_validator import TextValidator
-from image_validator import ImageValidator
-from embeddings_validator import EmbeddingsValidator
+from cortex_t.template.protocol import IsAlive
+from cortex_t.validators.text_validator import TextValidator
 
 iterations_per_set_weights = 12
 scoring_organic_timeout = 60
+SYNTHETIC_SCORING_LOOP_SLEEP = 10
 
 
 async def wait_for_coro_with_limit(coro, timeout: int) -> Tuple[bool, object]:
@@ -93,7 +92,7 @@ class WeightSetter:
                         f"Updating weights in {iterations_per_set_weights - steps_since_last_update - 1} iterations."
                     )
 
-                await asyncio.sleep(10)
+                await asyncio.sleep(SYNTHETIC_SCORING_LOOP_SLEEP)
 
     def select_validator(self, steps_passed):
         return self.image_vali if steps_passed % 5 in (0, 1, 2) else self.text_vali

@@ -1,12 +1,13 @@
 import argparse
 import time
 import subprocess
-import template
-from template.utils import get_version, send_discord_alert
+from cortex_t import template
+from cortex_t.template.utils import get_version, send_discord_alert
 
 default_address = "wss://bittensor-finney.api.onfinality.io/public-ws"
 webhook_url = ""
 current_version = template.__version__
+
 
 def update_and_restart(pm2_name, wallet_name, wallet_hotkey, address, autoupdate):
     global current_version
@@ -28,6 +29,7 @@ def update_and_restart(pm2_name, wallet_name, wallet_hotkey, address, autoupdate
             current_version = latest_version
         print("All up to date!")
         time.sleep(180)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

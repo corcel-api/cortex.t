@@ -17,6 +17,9 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
+
+import traceback
+
 from transformers import logging as hf_logging
 hf_logging.set_verbosity_error()
 
@@ -24,17 +27,12 @@ hf_logging.set_verbosity_error()
 import re
 import io
 import torch
-import openai
-import typing
-import difflib
 import asyncio
-import logging
 import aiohttp
-import requests
 import numpy as np
 from numpy.linalg import norm
 import bittensor as bt
-from template import utils
+from cortex_t.template import utils
 from PIL import Image
 from scipy.spatial.distance import cosine
 from sklearn.metrics.pairwise import cosine_similarity

@@ -1,30 +1,22 @@
 from __future__ import annotations
 
-import io
 import ast
 import asyncio
-import base64
 import json
-import boto3
 import base64
 import math
 import os
 import random
 import re
-import requests
-from PIL import Image
 import traceback
-import anthropic
-from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 from typing import Optional
 from stability_sdk import client as stability_client
-import stability_sdk.interfaces.gooseai.generation.generation_pb2 as generation
 
 import bittensor as bt
 import requests
 import wandb
 
-import template
+from .. import template
 
 from . import client
 

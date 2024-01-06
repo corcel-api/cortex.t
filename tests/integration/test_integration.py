@@ -29,12 +29,12 @@ class Test(ActiveSubnetworkBaseTest):
 
     @classmethod
     def miner_path_and_args(cls) -> list[str]:
-        return ['python', 'miner/miner.py', '--netuid', '49', '--subtensor.network', 'test', '--wallet.name', 'miner',
+        return ['cortex-t-miner', '--netuid', '49', '--subtensor.network', 'test', '--wallet.name', 'miner',
                 '--wallet.hotkey', 'default', '--axon.port', str(AXON_PORT)]
 
     @classmethod
     def validator_path_and_args(cls) -> list[str]:
-        return ['python', 'validators/validator.py', '--netuid', '49', '--subtensor.network', 'test', '--wallet.name',
+        return ['cortex-t-validator', '--netuid', '49', '--subtensor.network', 'test', '--wallet.name',
                 'validator', '--wallet.hotkey', 'default', '--http_port', str(VALIDATOR_PORT)]
 
     def test_text_validator(self):

@@ -3,10 +3,10 @@ import time
 import wandb
 import json
 import traceback
-import template
+from cortex_t import template
 import argparse
 import bittensor as bt
-from template.utils import get_version
+from cortex_t.template.utils import get_version
 
 valid_hotkeys = []
 

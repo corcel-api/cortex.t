@@ -1,11 +1,9 @@
-import base  # noqa
-
 import argparse
 import asyncio
 import copy
 import json
 import os
-import boto3
+import base64
 import pathlib
 import threading
 import time
@@ -15,16 +13,17 @@ from abc import ABC, abstractmethod
 from collections import deque
 from functools import partial
 from typing import Tuple
+from stability_sdk import client
 
 import bittensor as bt
 import wandb
-from config import check_config, get_config
+from cortex_t.miner.config import check_config, get_config
 from openai import AsyncOpenAI, OpenAI
-from anthropic_bedrock import AsyncAnthropicBedrock, HUMAN_PROMPT, AI_PROMPT, AnthropicBedrock
+from anthropic_bedrock import AsyncAnthropicBedrock
 
-import template
-from template.protocol import Embeddings, ImageResponse, IsAlive, StreamPrompting
-from template.utils import get_version
+from cortex_t import template
+from cortex_t.template.protocol import Embeddings, ImageResponse, IsAlive, StreamPrompting
+from cortex_t.template.utils import get_version
 import sys
 
 from starlette.types import Send
@@ -34,10 +33,19 @@ OpenAI.api_key = os.environ.get("OPENAI_API_KEY")
 if not OpenAI.api_key:
     raise ValueError("Please set the OPENAI_API_KEY environment variable.")
 
-api_key = os.environ.get("ANTHROPIC_API_KEY")
-if not api_key:
-    raise ValueError("Please set the ANTHROPIC_API_KEY environment variable.")
+stability_api = client.StabilityInference(
+    key=os.environ['STABILITY_KEY'],
+    verbose=True,
+    engine="stable-diffusion-xl-1024-v1-0"
+)
 
+api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+bedrock_client = AsyncAnthropicBedrock(
+    # default is 10 minutes
+    # more granular timeout options:  timeout=httpx.Timeout(60.0, read=5.0, write=10.0, connect=2.0),
+    timeout=60.0,
+)
 
 anthropic_client = anthropic.Anthropic()
 anthropic_client.api_key = api_key
@@ -53,7 +61,6 @@ if not wandb_api_key and not netrc_path.exists():
 
 client = AsyncOpenAI(timeout=60.0)
 valid_hotkeys = []
-
 
 
 class StreamMiner(ABC):
@@ -390,14 +397,19 @@ class StreamingTemplateMiner(StreamMiner):
             model = synapse.model
             messages = synapse.messages
             size = synapse.size
-            width, height = self.size.split('x')
-            width = int(width)
-            height = int(height)
+            width = synapse.width
+            height = synapse.height
             quality = synapse.quality
             style = synapse.style
             seed = synapse.seed
             steps = synapse.steps
             image_revised_prompt = None
+            cfg_scale = synapse.cfg_scale
+            sampler = synapse.sampler
+            samples = synapse.samples
+            image_data = {}
+
+            bt.logging.debug(f"data = {provider, model, messages, size, width, height, quality, style, seed, steps, image_revised_prompt, cfg_scale, sampler, samples}")
 
             if provider == "OpenAI":
                 meta = await client.images.generate(
@@ -409,44 +421,36 @@ class StreamingTemplateMiner(StreamMiner):
                     )
                 image_url = meta.data[0].url
                 image_revised_prompt = meta.data[0].revised_prompt
+                image_data["url"] = image_url
+                image_data["image_revised_prompt"] = image_revised_prompt
+                bt.logging.info(f"returning image response of {image_url}")
 
             elif provider == "Stability":
+                bt.logging.debug(f"calling stability for {messages, seed, steps, cfg_scale, width, height, samples, sampler}")
+
                 meta = stability_api.generate(
                     prompt=messages,
-                    seed=steps,
+                    seed=seed,
                     steps=steps,
-                    cfg_scale=8.0,
+                    cfg_scale=cfg_scale,
                     width=width,
                     height=height,
-                    samples=1,
-                    sampler=generation.SAMPLER_K_DPMPP_2M,
+                    samples=samples,
+                    # sampler=sampler
                 )
                 # Process and upload the image
-                for artifact in meta.artifacts:
-                    if artifact.finish_reason == generation.FILTER:
-                        bt.logging.error("Safety filters activated, prompt could not be processed.")
-                    elif artifact.type == generation.ARTIFACT_IMAGE:
-                        img = Image.open(io.BytesIO(artifact.binary))
-                        img_buffer = io.BytesIO()
-                        img.save(img_buffer, format="PNG")
-                        img_buffer.seek(0)
-                        # Upload to file.io
-                        response = requests.post('https://file.io', files={'file': img_buffer})
-                        if response.status_code == 200:
-                            image_url = response.json()['link']
-                        else:
-                            raise Exception("Failed to upload the image.")
+                b64s = []
+                for image in meta:
+                    for artifact in image.artifacts:
+                        b64s.append(base64.b64encode(artifact.binary).decode())
+
+                image_data["b64s"] = b64s
+                bt.logging.info(f"returning image response to {messages}")
 
             else:
                 bt.logging.error(f"Unknown provider: {provider}")
 
-            image_data = {
-                "url": image_url,
-                "revised_prompt": image_revised_prompt,
-            }
-
             synapse.completion = image_data
-            bt.logging.info(f"returning image response of {synapse.completion}")
             return synapse
 
         except Exception as exc:
@@ -503,57 +507,57 @@ class StreamingTemplateMiner(StreamMiner):
                         )
                         bt.logging.info(f"Streamed tokens: {joined_buffer}")
 
-                # for official claude users, comment out the other elif
-                elif provider == "Anthropic":
-                    models = ["anthropic.claude-v2:1", "anthropic.claude-instant-v1", "anthropic.claude-v1", "anthropic.claude-v2"]
-                    if model == models[0]: model = "claude-2.1"
-                    if model == models[1]: model = "claude-instant-1.2"
-                    if model == models[2]: model = "claude-instant-1.2"
-                    if model == models[3]: model = "claude-2.0"
-
-                    with anthropic_client.beta.messages.stream(
-                        max_tokens=max_tokens,
-                        messages=messages,
-                        model=model,
-                        temperature=temperature,
-                        top_p=top_p,
-                        top_k=top_k,
-                    ) as stream:
-                        for text in stream.text_stream:
-                            await send(
-                                {
-                                    "type": "http.response.body",
-                                    "body": text.encode("utf-8"),
-                                    "more_body": True,
-                                }
-                            )
-                            bt.logging.info(f"Streamed text: {text}")
-
-                # # For amazon bedrock users, comment out the other elif
+                # # for official claude users, comment out the other elif
                 # elif provider == "Anthropic":
-                #     stream = await bedrock_client.completions.create(
-                #         prompt=f"\n\nHuman: {messages}\n\nAssistant:",
-                #         max_tokens_to_sample=max_tokens,
-                #         temperature=temperature,  # must be <= 1.0
-                #         top_k=top_k,
-                #         top_p=top_p,
-                #         model=model,
-                #         stream=True,
-                #     )
+                #     models = ["anthropic.claude-v2:1", "anthropic.claude-instant-v1", "anthropic.claude-v1", "anthropic.claude-v2"]
+                #     if model == models[0]: model = "claude-2.1"
+                #     if model == models[1]: model = "claude-instant-1.2"
+                #     if model == models[2]: model = "claude-instant-1.2"
+                #     if model == models[3]: model = "claude-2.0"
 
-                #     async for completion in stream:
-                #         if completion.completion:
+                #     with anthropic_client.beta.messages.stream(
+                #         max_tokens=max_tokens,
+                #         messages=messages,
+                #         model=model,
+                #         temperature=temperature,
+                #         top_p=top_p,
+                #         top_k=top_k,
+                #     ) as stream:
+                #         for text in stream.text_stream:
                 #             await send(
                 #                 {
                 #                     "type": "http.response.body",
-                #                     "body": completion.completion.encode("utf-8"),
+                #                     "body": text.encode("utf-8"),
                 #                     "more_body": True,
                 #                 }
                 #             )
-                #             bt.logging.info(f"Streamed text: {completion.completion}")
+                #             bt.logging.info(f"Streamed text: {text}")
 
-                #     # Send final message to close the stream
-                #     await send({"type": "http.response.body", "body": b'', "more_body": False})
+                # For amazon bedrock users, comment out the other elif
+                elif provider == "Anthropic":
+                    stream = await bedrock_client.completions.create(
+                        prompt=f"\n\nHuman: {messages}\n\nAssistant:",
+                        max_tokens_to_sample=max_tokens,
+                        temperature=temperature,  # must be <= 1.0
+                        top_k=top_k,
+                        top_p=top_p,
+                        model=model,
+                        stream=True,
+                    )
+
+                    async for completion in stream:
+                        if completion.completion:
+                            await send(
+                                {
+                                    "type": "http.response.body",
+                                    "body": completion.completion.encode("utf-8"),
+                                    "more_body": True,
+                                }
+                            )
+                            bt.logging.info(f"Streamed text: {completion.completion}")
+
+                    # Send final message to close the stream
+                    await send({"type": "http.response.body", "body": b'', "more_body": False})
 
                 else:
                     bt.logging.error(f"Unknown provider: {provider}")
@@ -614,7 +618,11 @@ def get_valid_hotkeys(config):
             bt.logging.debug(f"JSON decoding error: {e} {run.id}")
 
 
-if __name__ == "__main__":
+def main():
     with StreamingTemplateMiner():
         while True:
             time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()

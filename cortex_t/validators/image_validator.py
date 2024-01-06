@@ -1,4 +1,3 @@
-import io
 import torch
 import wandb
 import random
@@ -6,14 +5,14 @@ import asyncio
 import aiohttp
 import base64
 import traceback
-import template.reward
+import cortex_t.template.reward
 import bittensor as bt
 
 from PIL import Image
 from io import BytesIO
-from template.utils import get_question
-from base_validator import BaseValidator
-from template.protocol import ImageResponse
+from cortex_t.template.utils import get_question
+from cortex_t.validators.base_validator import BaseValidator
+from cortex_t.template.protocol import ImageResponse
 
 
 class ImageValidator(BaseValidator):
@@ -132,9 +131,9 @@ class ImageValidator(BaseValidator):
 
                     if will_score_all:
                         if syn.provider == "OpenAI":
-                            score_task = template.reward.dalle_score(uid, image_url, self.size, syn.messages, self.weight)
+                            score_task = cortex_t.template.reward.dalle_score(uid, image_url, self.size, syn.messages, self.weight)
                         else:
-                            score_task = template.reward.deterministic_score(uid, syn, self.weight)
+                            score_task = cortex_t.template.reward.deterministic_score(uid, syn, self.weight)
 
                         score_tasks.append((uid, asyncio.create_task(score_task)))
 
