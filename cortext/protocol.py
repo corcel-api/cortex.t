@@ -107,7 +107,7 @@ class ImageResponse(bt.Synapse):
         title="Quality",
         description="The quality of the image."
     )
-    
+
     uid: int = pydantic.Field(
         default=3,
         title="uid",
@@ -150,7 +150,7 @@ class Embeddings( bt.Synapse):
         title="Embeddings",
         description="The resulting list of embeddings, each corresponding to an input text."
     )
-    
+
     uid: int = pydantic.Field(
         default=60,
         title="uid",
@@ -317,6 +317,15 @@ class StreamPrompting(bt.StreamingSynapse):
             "axon": extract_info("bt_header_axon"),
             "messages": self.messages,
             "completion": self.completion,
+            "provider": self.provider,
+            "model": self.model,
+            "seed": self.seed,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "uid": self.uid,
+            "timeout": self.timeout,
         }
 
 
