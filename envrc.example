@@ -4,7 +4,10 @@ export WANDB_API_KEY=key_here
 export OPENAI_API_KEY=key_here
 export GOOGLE_API_KEY=key_here
 export ANTHROPIC_API_KEY=key_here
-
+export GROQ_API_KEY=key_here
+export AWS_ACCESS_KEY=key_here
+export AWS_SECRET_KEY=key_here
+export PIXABAY_API_KEY=key_here
 
 # when running tests locally, it's useful to whitelist your validator key so it can connect to your miner
 export CORTEXT_MINER_ADDITIONAL_WHITELIST_VALIDATOR_KEYS=

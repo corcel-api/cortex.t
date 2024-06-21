@@ -159,14 +159,14 @@ class WeightSetter:
 
             axon = self.metagraph.axons[synapse.uid]
             responses = self.dendrite.query(
-                axons=[axon], 
-                synapse=synapse, 
+                axons=[axon],
+                synapse=synapse,
                 deserialize=False,
                 timeout=synapse.timeout,
                 streaming=True,
             )
             return await handle_response(responses)
-        
+
         token_streamer = partial(_prompt, synapse)
         return synapse.create_streaming_response(token_streamer)
 
@@ -221,7 +221,7 @@ class WeightSetter:
             except Exception as e:
                 bt.logging.error(f'Encountered in {self.consume_organic_scoring.__name__} loop:\n{traceback.format_exc()}')
                 await asyncio.sleep(10)
-                
+
 
     async def perform_synthetic_scoring_and_update_weights(self):
         while True:

@@ -1,29 +1,25 @@
+import argparse
+import asyncio
 import logging
+import os
+import random
+import sys
 import time
+import traceback
+from pathlib import Path
 from typing import Tuple
 
 import base  # noqa
-
-import os
-import argparse
-import asyncio
-import random
-import traceback
-from pathlib import Path
-
 import bittensor as bt
+import cortext
 import torch
 import wandb
-from image_validator import ImageValidator
-from embeddings_validator import EmbeddingsValidator
-from text_validator import TextValidator
 from base_validator import BaseValidator
-from envparse import env
-
-import cortext
 from cortext import utils
-import sys
-
+from embeddings_validator import EmbeddingsValidator
+from envparse import env
+from image_validator import ImageValidator
+from text_validator import TextValidator
 from weight_setter import WeightSetter
 
 text_vali = None
@@ -36,8 +32,8 @@ wandb_runs = {}
 def get_config() -> bt.config:
     parser = argparse.ArgumentParser()
     parser.add_argument("--netuid", type=int, default=18)
-    parser.add_argument('--wandb_off', action='store_false', dest='wandb_on')
-    parser.add_argument('--axon.port', type=int, default=8000)
+    parser.add_argument("--wandb_off", action="store_false", dest="wandb_on")
+    parser.add_argument("--axon.port", type=int, default=8000)
     parser.set_defaults(wandb_on=True)
     bt.subtensor.add_args(parser)
     bt.logging.add_args(parser)
@@ -57,21 +53,16 @@ def init_wandb(config, my_uid, wallet: bt.wallet):
     if not config.wandb_on:
         return
 
-    run_name = f'validator-{my_uid}-{cortext.__version__}'
+    run_name = f"validator-{my_uid}-{cortext.__version__}"
     config.uid = my_uid
     config.hotkey = wallet.hotkey.ss58_address
     config.run_name = run_name
     config.version = cortext.__version__
-    config.type = 'validator'
+    config.type = "validator"
 
     # Initialize the wandb run for the single project
     run = wandb.init(
-        name=run_name,
-        project=cortext.PROJECT_NAME,
-        entity='cortex-t',
-        config=config,
-        dir=config.full_path,
-        reinit=True
+        name=run_name, project=cortext.PROJECT_NAME, entity="cortex-t", config=config, dir=config.full_path, reinit=True
     )
 
     # Sign the run to ensure it's from the correct hotkey
@@ -112,12 +103,7 @@ def initialize_validators(vali_config, test=False):
 def main(test=False) -> None:
     config = get_config()
     wallet, subtensor, dendrite, my_uid = initialize_components(config)
-    validator_config = {
-        "dendrite": dendrite,
-        "config": config,
-        "subtensor": subtensor,
-        "wallet": wallet
-    }
+    validator_config = {"dendrite": dendrite, "config": config, "subtensor": subtensor, "wallet": wallet}
     initialize_validators(validator_config, test)
     init_wandb(config, my_uid, wallet)
     loop = asyncio.get_event_loop()

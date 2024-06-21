@@ -37,4 +37,4 @@ class BaseValidator(ABC):
         bt.logging.info("starting query")
         query_responses, uid_to_question = await self.start_query(available_uids, metagraph)
         bt.logging.info("scoring query")
-        return await self.score_responses(query_responses, uid_to_question, metagraph)
+        return await self.score_responses(available_uids, query_responses, uid_to_question, metagraph)

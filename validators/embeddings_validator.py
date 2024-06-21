@@ -96,7 +96,7 @@ class EmbeddingsValidator(BaseValidator):
         query_responses = await asyncio.gather(*query_tasks)
         return query_responses, uid_to_question
 
-    async def score_responses(self, query_responses, uid_to_question, metagraph):
+    async def score_responses(self, _, query_responses, uid_to_question, metagraph):
         scores = torch.zeros(len(metagraph.hotkeys))
         uid_scores_dict = {}
         embedding_score_tasks = []

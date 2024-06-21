@@ -92,7 +92,7 @@ class ImageValidator(BaseValidator):
             bt.logging.error(f"Exception occurred while downloading image: {traceback.format_exc()}")
 
 
-    async def score_responses(self, query_responses, uid_to_question, metagraph):
+    async def score_responses(self, _, query_responses, uid_to_question, metagraph):
         scores = torch.zeros(len(metagraph.hotkeys))
         uid_scores_dict = {}
         download_tasks = []
@@ -136,7 +136,7 @@ class ImageValidator(BaseValidator):
                         self.wandb_data["images"][uid] = wandb.Image(image)
                 except:
                     bt.logging.error(f"error in downloading images {traceback.exception_exc()}")
-                    
+
                 # Process score results
                 score_results = await asyncio.gather(*score_tasks, return_exceptions=True)
                 for score, uid in zip(score_results, [uid for uid, _ in query_responses]):
@@ -152,4 +152,3 @@ class ImageValidator(BaseValidator):
         bt.logging.info(f"Final scores: {uid_scores_dict}")
         bt.logging.info("score_responses process completed.")
         return scores, uid_scores_dict, self.wandb_data
-

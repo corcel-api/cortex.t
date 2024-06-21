@@ -1,10 +1,12 @@
 import argparse
 import asyncio
 import base64
+import aioboto3
 import copy
 import json
 import os
 import pathlib
+import httpx
 import requests
 import threading
 import time
@@ -22,6 +24,7 @@ from stability_sdk import client
 from config import check_config, get_config
 from openai import AsyncOpenAI, OpenAI
 from anthropic import AsyncAnthropic
+from groq import AsyncGroq
 from stability_sdk import client as stability_client
 from PIL import Image
 import stability_sdk.interfaces.gooseai.generation.generation_pb2 as generation
@@ -29,7 +32,7 @@ from anthropic_bedrock import AsyncAnthropicBedrock, HUMAN_PROMPT, AI_PROMPT, An
 
 import cortext
 from cortext.protocol import Embeddings, ImageResponse, IsAlive, StreamPrompting, TextPrompting
-from cortext.utils import get_version
+from cortext.utils import get_version, get_api_key
 import sys
 
 from starlette.types import Send
@@ -38,50 +41,41 @@ from starlette.types import Send
 # Set up api keys from .env file and initialze clients
 
 # OpenAI
-OpenAI.api_key = os.environ.get("OPENAI_API_KEY")
-if not OpenAI.api_key:
-    raise ValueError("Please set the OPENAI_API_KEY environment variable.")
+OpenAI.api_key = get_api_key("OpenAI", "OPENAI_API_KEY")
+openai_client = AsyncOpenAI(timeout=60.0)
 
-client = AsyncOpenAI(timeout=60.0)
-
-# Stability
-# stability_key = os.environ.get("STABILITY_API_KEY")
-# if not stability_key:
-#     raise ValueError("Please set the STABILITY_KEY environment variable.")
-
-claude_key = os.environ.get("ANTHROPIC_API_KEY")
-if not claude_key:
-    raise ValueError("claude api key not found in environment variables. Go to https://console.anthropic.com/settings/keys to get one. Then set it as ANTHROPIC_API_KEY in your .env")
-
-claude_client = AsyncAnthropic()
-claude_client.api_key = claude_key
-
-# stability_api = stability_client.StabilityInference(
-#     key=stability_key,
-#     verbose=True,
-# )
+# Stability API
+# stability_key = get_api_key("Stability", "STABILITY_API_KEY")
+# stability_api = stability_client.StabilityInference(key=stability_key, verbose=True)
 
 # Anthropic
-# Only if using the official claude for access instead of aws bedrock
-api_key = os.environ.get("ANTHROPIC_API_KEY")
-anthropic_client = anthropic.Anthropic()
-anthropic_client.api_key = api_key
+anthropic_key = get_api_key("Anthropic", "ANTHROPIC_API_KEY")
+anthropic_client = AsyncAnthropic()
+anthropic_client.api_key = anthropic_key
 
-# For AWS bedrock (default)
-bedrock_client = AsyncAnthropicBedrock(
+# Anthropic Bedrock (default)
+anthropic_bedrock_client = AsyncAnthropicBedrock(
     # default is 10 minutes
     # more granular timeout options:  timeout=httpx.Timeout(60.0, read=5.0, write=10.0, connect=2.0),
     timeout=60.0,
 )
-anthropic_client = anthropic.Anthropic()
 
-# For google/gemini
-google_key=os.environ.get('GOOGLE_API_KEY')
-if not google_key:
-    raise ValueError("Please set the GOOGLE_API_KEY environment variable.")
+# AWS Bedrock
+bedrock_client_parameters = {
+    "service_name": 'bedrock-runtime',
+    "aws_access_key_id": get_api_key("AWS Bedrock", "AWS_ACCESS_KEY"),
+    "aws_secret_access_key": get_api_key("AWS Bedrock", "AWS_SECRET_KEY"),
+    "region_name": "us-east-1"
+}
 
+# Google/gemini
+google_key=get_api_key("Google", "GOOGLE_API_KEY")
 genai.configure(api_key=google_key)
 
+# Groq
+groq_key = get_api_key("Groq", "GROQ_API_KEY")
+groq_client = AsyncGroq()
+groq_client.api_key = groq_key
 
 # Wandb
 netrc_path = pathlib.Path.home() / ".netrc"
@@ -153,7 +147,7 @@ class StreamMiner():
         else:
             bt.logging.debug(f"Starting axon on port {self.config.axon.port}")
             self.axon = bt.axon(wallet=self.wallet, port=self.config.axon.port)
-        
+
         # Attach determiners which functions are called when servicing a request.
         bt.logging.info("Attaching forward function to axon.")
         print(f"Attaching forward function to axon. {self.prompt}")
@@ -182,7 +176,7 @@ class StreamMiner():
         self.request_timestamps: dict = {}
         thread = threading.Thread(target=get_valid_hotkeys, args=(self.config,))
         thread.start()
-    
+
     def text(self, synapse: TextPrompting) -> TextPrompting:
         synapse.completion = "completed by miner"
         return synapse
@@ -196,7 +190,7 @@ class StreamMiner():
             hotkey = synapse.dendrite.hotkey
             synapse_type = type(synapse).__name__
 
-            # if hotkey in cortext.WHITELISTED_KEYS:  
+            # if hotkey in cortext.WHITELISTED_KEYS:
             #     return False,  f"accepting {synapse_type} request from {hotkey}"
 
             if hotkey not in valid_hotkeys:
@@ -361,6 +355,40 @@ class StreamMiner():
     async def prompt(self, synapse: StreamPrompting) -> StreamPrompting:
         bt.logging.info(f"started processing for synapse {synapse}")
 
+        async def generate_messages_to_claude(messages):
+            system_prompt = None
+            filtered_messages = []
+            for message in messages:
+                if message["role"] == "system":
+                    system_prompt = message["content"]
+                else:
+                    message_to_append = {
+                            "role": message["role"],
+                            "content": [],
+                        }
+                    if message.get("image"):
+                        image_url = message.get("image")
+                        image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+                        message_to_append["content"].append(
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data,
+                                },
+                            }
+                        )
+                    if message.get("content"):
+                        message_to_append["content"].append(
+                            {
+                                "type": "text",
+                                "text": message["content"],
+                            }
+                        )
+                    filtered_messages.append(message_to_append)
+            return filtered_messages, system_prompt
+
         async def _prompt(synapse, send: Send):
             try:
                 provider = synapse.provider
@@ -375,9 +403,33 @@ class StreamMiner():
 
                 if provider == "OpenAI":
                     # Test seeds + higher temperature
-                    response = await client.chat.completions.create(
+                    message = messages[0]
+                    filtered_messages = [
+                        {
+                        "role": message["role"],
+                        "content": [],
+                        }
+                    ]
+                    if message.get("content"):
+                        filtered_messages[0]["content"].append(
+                            {
+                                "type": "text",
+                                "text": message["content"],
+                            }
+                        )
+                    if message.get("image"):
+                        image_url = message.get("image")
+                        filtered_messages[0]["content"].append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image_url,
+                                },
+                            }
+                        )
+                    response = await openai_client.chat.completions.create(
                         model=model,
-                        messages=messages,
+                        messages=filtered_messages,
                         temperature=temperature,
                         stream=True,
                         seed=seed,
@@ -411,8 +463,8 @@ class StreamMiner():
                         )
                         bt.logging.info(f"Streamed tokens: {joined_buffer}")
 
-                elif provider == "Anthropic":
-                    stream = await bedrock_client.completions.create(
+                elif provider == "AnthropicBedrock":
+                    stream = await anthropic_bedrock_client.completions.create(
                         prompt=f"\n\nHuman: {messages}\n\nAssistant:",
                         max_tokens_to_sample=max_tokens,
                         temperature=temperature,  # must be <= 1.0
@@ -436,15 +488,9 @@ class StreamMiner():
                     # Send final message to close the stream
                     await send({"type": "http.response.body", "body": b'', "more_body": False})
 
-                elif provider == "Claude":
-                    system_prompt = None
-                    filtered_messages = []
-                    for message in messages:
-                        if message["role"] == "system":
-                            system_prompt = message["content"]
-                        else:
-                            filtered_messages.append(message)
-                    
+                elif provider == "Anthropic":
+                    filtered_messages, system_prompt = await generate_messages_to_claude(messages)
+
                     stream_kwargs = {
                         "max_tokens": max_tokens,
                         "messages": filtered_messages,
@@ -454,7 +500,7 @@ class StreamMiner():
                     if system_prompt:
                         stream_kwargs["system"] = system_prompt
 
-                    completion = claude_client.messages.stream(**stream_kwargs)
+                    completion = anthropic_client.messages.stream(**stream_kwargs)
                     async with completion as stream:
                         async for text in stream.text_stream:
                             await send(
@@ -468,7 +514,7 @@ class StreamMiner():
 
                     # Send final message to close the stream
                     await send({"type": "http.response.body", "body": b'', "more_body": False})
-                    
+
                 elif provider == "Gemini":
                     model = genai.GenerativeModel(model)
                     stream = model.generate_content(
@@ -497,6 +543,158 @@ class StreamMiner():
 
                     # Send final message to close the stream
                     await send({"type": "http.response.body", "body": b'', "more_body": False})
+
+                elif provider == "Groq":
+                    stream_kwargs = {
+                        "messages": messages,
+                        "model": model,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "top_p": top_p,
+                        "seed": seed,
+                        "stream": True,
+                    }
+
+                    stream = await groq_client.chat.completions.create(**stream_kwargs)
+                    buffer = []
+                    n = 1
+                    async for chunk in stream:
+                        token = chunk.choices[0].delta.content or ""
+                        buffer.append(token)
+                        if len(buffer) == n:
+                            joined_buffer = "".join(buffer)
+                            await send(
+                                {
+                                    "type": "http.response.body",
+                                    "body": joined_buffer.encode("utf-8"),
+                                    "more_body": True,
+                                }
+                            )
+                            bt.logging.info(f"Streamed tokens: {joined_buffer}")
+                            buffer = []
+
+                elif provider == "Bedrock":
+                    async def generate_request():
+                        if model.startswith("cohere"):
+                            native_request = {
+                                "message": messages[0]["content"],
+                                "temperature": temperature,
+                                "max_tokens": max_tokens,
+                                "p": top_p,
+                                "seed": seed,
+                            }
+                        elif model.startswith("meta"):
+                            native_request = {
+                                "prompt": messages[0]["content"],
+                                "temperature": temperature,
+                                "max_gen_len": 2048 if max_tokens > 2048 else max_tokens,
+                                "top_p": top_p,
+                            }
+                        elif model.startswith("anthropic"):
+                            message, system_prompt = await generate_messages_to_claude(messages)
+                            native_request = {
+                                "anthropic_version": "bedrock-2023-05-31",
+                                "messages": message,
+                                "temperature": temperature,
+                                "max_tokens": max_tokens,
+                                "top_p": top_p,
+                            }
+                            if system_prompt:
+                                native_request["system"] = system_prompt
+                        elif model.startswith("mistral"):
+                            native_request = {
+                                "prompt": messages[0]["content"],
+                                "temperature": temperature,
+                                "max_tokens": max_tokens,
+                            }
+                        elif model.startswith("amazon"):
+                            native_request = {
+                                "inputText": messages[0]["content"],
+                                "textGenerationConfig": {
+                                    "maxTokenCount": max_tokens,
+                                    "temperature": temperature,
+                                    "topP": top_p,
+                                },
+                            }
+                        elif model.startswith("ai21"):
+                            native_request = {
+                                "prompt": messages[0]["content"],
+                                "maxTokens": max_tokens,
+                                "temperature": temperature,
+                                "topP": top_p,
+                            }
+                        request = json.dumps(native_request)
+                        return request
+
+                    async def extract_token(chunk):
+                        if model.startswith("cohere"):
+                            token = chunk.get("text") or ""
+                        elif model.startswith("meta"):
+                            token = chunk.get("generation") or ""
+                        elif model.startswith("anthropic"):
+                            token = ""
+                            if chunk['type'] == 'content_block_delta':
+                                if chunk['delta']['type'] == 'text_delta':
+                                    token = chunk['delta']['text']
+                        elif model.startswith("mistral"):
+                            token = chunk.get("outputs")[0]["text"] or ""
+                        elif model.startswith("amazon"):
+                            token = chunk.get("outputText") or ""
+                        elif model.startswith("ai21"):
+                            token = json.loads(message)["completions"][0]["data"]["text"]
+                        return token
+                    aws_session = aioboto3.Session()
+                    aws_bedrock_client = aws_session.client(**bedrock_client_parameters)
+
+                    request = await generate_request()
+                    async with aws_bedrock_client as client:
+                        if model.startswith("ai21"):
+                            response = await client.invoke_model(
+                                modelId=model, body=request
+                            )
+                            message = await response['body'].read()
+                            message = await extract_token(message)
+                            await send(
+                                {
+                                    "type": "http.response.body",
+                                    "body": message.encode("utf-8"),
+                                    "more_body": True,
+                                }
+                            )
+                            bt.logging.info(f"Streamed tokens: {message}")
+                        else:
+                            stream = await client.invoke_model_with_response_stream(
+                                modelId=model, body=request
+                            )
+
+                            buffer = []
+                            n = 1
+                            async for event in stream["body"]:
+                                chunk = json.loads(event["chunk"]["bytes"])
+                                token = await extract_token(chunk)
+                                buffer.append(token)
+                                if len(buffer) == n:
+                                    joined_buffer = "".join(buffer)
+                                    await send(
+                                        {
+                                            "type": "http.response.body",
+                                            "body": joined_buffer.encode("utf-8"),
+                                            "more_body": True,
+                                        }
+                                    )
+                                    bt.logging.info(f"Streamed tokens: {joined_buffer}")
+                                    buffer = []
+
+                            if buffer:
+                                joined_buffer = "".join(buffer)
+                                await send(
+                                    {
+                                        "type": "http.response.body",
+                                        "body": joined_buffer.encode("utf-8"),
+                                        "more_body": False,
+                                    }
+                                )
+                                bt.logging.info(f"Streamed tokens: {joined_buffer}")
 
                 else:
                     bt.logging.error(f"Unknown provider: {provider}")
@@ -530,7 +728,7 @@ class StreamMiner():
             bt.logging.debug(f"data = {provider, model, messages, size, width, height, quality, style, seed, steps, image_revised_prompt, cfg_scale, sampler, samples}")
 
             if provider == "OpenAI":
-                meta = await client.images.generate(
+                meta = await openai_client.images.generate(
                     model=model,
                     prompt=messages,
                     size=size,
@@ -543,27 +741,27 @@ class StreamMiner():
                 image_data["image_revised_prompt"] = image_revised_prompt
                 bt.logging.info(f"returning image response of {image_url}")
 
-            elif provider == "Stability":
-                bt.logging.debug(f"calling stability for {messages, seed, steps, cfg_scale, width, height, samples, sampler}")
+            # elif provider == "Stability":
+            #     bt.logging.debug(f"calling stability for {messages, seed, steps, cfg_scale, width, height, samples, sampler}")
 
-                meta = stability_api.generate(
-                    prompt=messages,
-                    seed=seed,
-                    steps=steps,
-                    cfg_scale=cfg_scale,
-                    width=width,
-                    height=height,
-                    samples=samples,
-                    # sampler=sampler
-                )
-                # Process and upload the image
-                b64s = []
-                for image in meta:
-                    for artifact in image.artifacts:
-                        b64s.append(base64.b64encode(artifact.binary).decode())
+            #     meta = stability_api.generate(
+            #         prompt=messages,
+            #         seed=seed,
+            #         steps=steps,
+            #         cfg_scale=cfg_scale,
+            #         width=width,
+            #         height=height,
+            #         samples=samples,
+            #         # sampler=sampler
+            #     )
+            #     # Process and upload the image
+            #     b64s = []
+            #     for image in meta:
+            #         for artifact in image.artifacts:
+            #             b64s.append(base64.b64encode(artifact.binary).decode())
 
-                image_data["b64s"] = b64s
-                bt.logging.info(f"returning image response to {messages}")
+            #     image_data["b64s"] = b64s
+            #     bt.logging.info(f"returning image response to {messages}")
 
             else:
                 bt.logging.error(f"Unknown provider: {provider}")
@@ -583,7 +781,7 @@ class StreamMiner():
             for batch in batches:
                 filtered_batch = [text for text in batch if text.strip()]
                 if filtered_batch:
-                    task = asyncio.create_task(client.embeddings.create(
+                    task = asyncio.create_task(openai_client.embeddings.create(
                         input=filtered_batch, model=model, encoding_format='float'
                     ))
                     tasks.append(task)
@@ -671,5 +869,3 @@ if __name__ == "__main__":
     with StreamMiner():
         while True:
             time.sleep(1)
-
-

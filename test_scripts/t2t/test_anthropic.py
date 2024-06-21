@@ -1,49 +1,87 @@
-from anthropic_bedrock import AsyncAnthropicBedrock, HUMAN_PROMPT, AI_PROMPT, AnthropicBedrock
+from anthropic import AsyncAnthropic
+import os
+import base64
+import httpx
+import asyncio
+from cortext.utils import get_api_key, generate_messages_to_claude
 
-AsyncClient = AsyncAnthropicBedrock(
-    # default is 10 minutes
-    # more granular timeout options:  timeout=httpx.Timeout(60.0, read=5.0, write=10.0, connect=2.0),
-    timeout=60.0,
-)
-client = AnthropicBedrock()
 
-question = """
-Hey Claude! How can I recursively list all files in a directory in Python?
-"""
-models = ["anthropic.claude-v2:1", "anthropic.claude-instant-v1", "anthropic.claude-v1", "anthropic.claude-v2", "anthropic.claude-3-sonnet-20240229-v1:0"]
+anthropic_key = get_api_key("Anthropic", "ANTHROPIC_API_KEY")
+anthropic_client = AsyncAnthropic()
+anthropic_client.api_key = anthropic_key
 
-# Define an async function
-async def run_async_code():
+messages = [
+    {
+        "role": "system",
+        "content": "respond in spanish"
+    },
+    {
+        "role": "user",
+        "image": "https://cdn.britannica.com/80/140480-131-28E57753/Dromedary-camels.jpg",
+        "content": "how many animals on this picture?"
+    }
+]
+max_tokens = 100
+model = "claude-3-opus-20240229"
 
-    stream = await AsyncClient.completions.create(
-    prompt=f"{HUMAN_PROMPT} {question} {AI_PROMPT}",
-    max_tokens_to_sample=300,
-    temperature=0.01, # must be <= 1.0
-    top_p=1,
-    model=models[-1],
-    stream=True,
-    )
 
-    async for completion in stream:
-        print(completion.completion, end="", flush=True)
+async def generate_messages_to_claude(messages):
+            system_prompt = None
+            filtered_messages = []
+            for message in messages:
+                if message["role"] == "system":
+                    system_prompt = message["content"]
+                else:
+                    message_to_append = {
+                            "role": message["role"],
+                            "content": [],
+                        }
+                    if message.get("image"):
+                        image_url = message.get("image")
+                        image_data = base64.b64encode(httpx.get(image_url).content).decode("utf-8")
+                        message_to_append["content"].append(
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data,
+                                },
+                            }
+                        )
+                    if message.get("content"):
+                        message_to_append["content"].append(
+                            {
+                                "type": "text",
+                                "text": message["content"],
+                            }
+                        )
+                    filtered_messages.append(message_to_append)
+            return filtered_messages, system_prompt
+
+
+async def call_anthropic(messages, max_tokens, model):
+    filtered_messages, system_prompt = await generate_messages_to_claude(messages)
+
+    stream_kwargs = {
+        "max_tokens": max_tokens,
+        "messages": filtered_messages,
+        "model": model,
+    }
+
+    if system_prompt:
+        stream_kwargs["system"] = system_prompt
+
+    completion = anthropic_client.messages.stream(**stream_kwargs)
+    async with completion as stream:
+        async for text in stream.text_stream:
+            print(text, end="", flush=True)
+
+    # Send final message to close the stream
     print("\n")
 
-# Run the async function in an event loop
+async def main():
+    await call_anthropic(messages, max_tokens, model)
+
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(run_async_code())
-
-
-
-# streaming with non async client
-
-print("------ streamed response ------")
-stream = client.completions.create(
-    model=models[1],
-    prompt=f"{HUMAN_PROMPT} {question}{AI_PROMPT}",
-    max_tokens_to_sample=500,
-    stream=True,
-)
-for item in stream:
-    print(item.completion, end="")
-print()
+    asyncio.run(main())
