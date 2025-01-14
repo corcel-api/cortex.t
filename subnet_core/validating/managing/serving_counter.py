@@ -14,6 +14,8 @@ class ServingCounter:
         self.quota = quota
         self.redis_client = redis_client
         self.key = f"{CONFIG.redis.miner_manager_key}:{uid}"
+        self.quota_key = f"{CONFIG.redis.miner_manager_key}:{uid}:quota"
+        self.redis_client.set(self.quota_key, quota)
 
     def increment(self, amount: int = 1, ignore_threshold: float = None) -> bool:
         """

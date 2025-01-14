@@ -31,7 +31,7 @@ class Validator(base.BaseValidator):
     async def start_epoch(self):
         logger.info("Starting forward pass")
         batch_size = 4
-        concurrent_batches = 4
+        concurrent_batches = 16
         futures = []
         for _ in range(concurrent_batches):
             model_config = CONFIG.bandwidth.sample_model
@@ -41,6 +41,7 @@ class Validator(base.BaseValidator):
             synapse = await self.synthesize(model_config)
             futures.append(self.process_batch(uids, synapse, model_config))
         await asyncio.gather(*futures)
+        logger.info("Finished forward pass")
 
     async def process_batch(self, uids, synapse, model_config):
         axons = [self.metagraph.axons[uid] for uid in uids]

@@ -121,16 +121,13 @@ class ChatStreamingProtocol(StreamingSynapse):
             "header_size": int(headers.get("header_size", 0)),
             "dendrite": extract_info("bt_header_dendrite"),  # dendrite info
             "axon": extract_info("bt_header_axon"),  # axon info
-            "miner_responses": self.miner_responses,
+            "streaming_chunks": self.streaming_chunks,
             "miner_payload": self.miner_payload,
         }
 
     def verify(self) -> bool:
-        if len(self.miner_responses) == 0:
+        if len(self.streaming_chunks) == 0:
             return False
-        completion = ""
-        for response in self.miner_responses:
-            completion += response.choices[0].delta.content
-        if not len(completion):
+        if not len(self.completion):
             return False
         return True
