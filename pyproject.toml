@@ -1,0 +1,28 @@
+[project]
+name = "decentralized-video-compression"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "fastapi",
+    "pydantic",
+    "numpy",
+    "opencv-python",
+    "loguru",
+    "bittensor==8.5.1",
+    "redis",
+    "sqlalchemy",
+    "pandas",
+    "httpx",
+    "pydantic-settings",
+    "firerequests",
+]
+
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
