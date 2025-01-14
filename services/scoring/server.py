@@ -13,4 +13,8 @@ app = FastAPI()
 @app.post("/score")
 async def score(request: ScoringRequest):
     bt.logging.info(f"Scoring request received: {request}")
-    return ScoringResponse(score=0.75)
+    miner_responses = request.responses
+    scores = []
+    for response in miner_responses:
+        scores.append(0.75)
+    return ScoringResponse(scores=scores)

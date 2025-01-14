@@ -4,6 +4,7 @@ from .configs import (
     BandwidthConfig,
     ScoreConfig,
     SQLConfig,
+    SynthesizeConfig,
 )
 from loguru import logger
 
@@ -14,6 +15,7 @@ class GlobalConfig(BaseSettings):
     score: ScoreConfig = ScoreConfig()
     sql: SQLConfig = SQLConfig(url="sqlite:///miner_metadata.db")
     network: str = "mainnet"
+    synthesize: SynthesizeConfig = SynthesizeConfig(host="localhost", port=8887)
 
     class Config:
         env_nested_delimiter = "__"

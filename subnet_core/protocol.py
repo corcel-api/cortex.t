@@ -56,12 +56,12 @@ class MinerResponse(BaseModel):
 
 
 class ScoringRequest(BaseModel):
-    responses: list[MinerResponse]
+    responses: list[str]
     request: MinerPayload
 
 
 class ScoringResponse(BaseModel):
-    score: float = Field(description="The score of the compressed video", default=0.0)
+    scores: list[float] = Field(description="The scores of the responses", default=[])
 
 
 class ChatStreamingProtocol(StreamingSynapse):
@@ -70,13 +70,17 @@ class ChatStreamingProtocol(StreamingSynapse):
         default=MinerPayload(),
         frozen=True,
     )
-    miner_responses: list[MinerResponse] = Field(
+    streaming_chunks: list[MinerResponse] = Field(
         description="The response from the miner", default=[]
     )
 
     @property
+    def miner_response(self):
+        return "".join([r.choices[0].delta.content for r in self.streaming_chunks])
+
+    @property
     def completion(self):
-        return "".join([r.choices[0].delta.content for r in self.miner_responses])
+        return "".join([r.choices[0].delta.content for r in self.streaming_chunks])
 
     async def process_streaming_response(self, response: StreamingResponse):
         async for line in response.content:
@@ -88,11 +92,11 @@ class ChatStreamingProtocol(StreamingSynapse):
                     break
                 try:
                     chunk = MinerResponse.model_validate_json(data)
-                    self.miner_responses.append(chunk)
+                    self.streaming_chunks.append(chunk)
                     yield chunk
                 except Exception as e:
                     print("Error", e)
-                    continue  # Skip invalid chunks
+                    break  # Skip invalid chunks
 
     def extract_response_json(self, response: StreamingSynapse) -> dict:
         # iterate over the response headers and extract the necessary data
@@ -120,3 +124,13 @@ class ChatStreamingProtocol(StreamingSynapse):
             "miner_responses": self.miner_responses,
             "miner_payload": self.miner_payload,
         }
+
+    def verify(self) -> bool:
+        if len(self.miner_responses) == 0:
+            return False
+        completion = ""
+        for response in self.miner_responses:
+            completion += response.choices[0].delta.content
+        if not len(completion):
+            return False
+        return True
