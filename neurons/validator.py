@@ -12,9 +12,6 @@ import pandas as pd
 class Validator(base.BaseValidator):
     def __init__(self):
         super().__init__()
-        self.miner_manager = validating.managing.MinerManager(
-            uid=self.uid, wallet=self.wallet, metagraph=self.metagraph
-        )
         logger.info("Initialized miner manager")
         self.dendrite = bt.dendrite(wallet=self.wallet)
         logger.info("Initialized dendrite")
@@ -24,6 +21,9 @@ class Validator(base.BaseValidator):
         self.synthesize_client = httpx.AsyncClient(
             base_url=f"http://{CONFIG.synthesize.host}:{CONFIG.synthesize.port}"
         )
+        self.miner_manager_client = httpx.AsyncClient(
+            base_url=f"http://{CONFIG.miner_manager.host}:{CONFIG.miner_manager.port}"
+        )
         logger.info(
             f"Initialized score client with base URL: http://{CONFIG.score.host}:{CONFIG.score.port}"
         )
@@ -31,16 +31,25 @@ class Validator(base.BaseValidator):
     async def start_epoch(self):
         logger.info("Starting forward pass")
         batch_size = 4
-        concurrent_batches = 16
+        concurrent_batches = 1
         futures = []
         for _ in range(concurrent_batches):
             model_config = CONFIG.bandwidth.sample_model
-            uids = self.miner_manager.consume(
-                threshold=0.5, k=batch_size, task_credit=model_config.credit
+            response = await self.miner_manager_client.post(
+                "/api/consume",
+                json={
+                    "threshold": 0.05,
+                    "k": batch_size,
+                    "task_credit": model_config.credit,
+                },
             )
+            response_json = response.json()
+            uids = response_json["uids"]
+            uids = [1]
             synapse = await self.synthesize(model_config)
             futures.append(self.process_batch(uids, synapse, model_config))
         await asyncio.gather(*futures)
+        await asyncio.sleep(60)
         logger.info("Finished forward pass")
 
     async def process_batch(self, uids, synapse, model_config):
@@ -66,9 +75,7 @@ class Validator(base.BaseValidator):
     async def synthesize(self, model_config: ModelConfig):
         response = await self.synthesize_client.post(
             "/synthesize",
-            json={
-                "model_config": model_config.model_dump(),
-            },
+            json=model_config.model_dump(),
         )
         response_json = response.json()
         if model_config.synapse_type == "streaming-chat":
@@ -105,9 +112,18 @@ class Validator(base.BaseValidator):
                 valid_uids.append(uid)
                 logger.success(f"Valid response from miner {uid}")
         logger.info(f"Zeroing out scores for {len(invalid_responses)} miners")
-        self.miner_manager.step(
-            scores=[0.0] * len(invalid_responses), total_uids=invalid_uids
+        result = await self.miner_manager_client.post(
+            "/api/step",
+            json={
+                "scores": [0.0] * len(invalid_responses),
+                "total_uids": invalid_uids,
+            },
         )
+        result_json = result.json()
+        if result_json["success"]:
+            logger.success("Stepped miners")
+        else:
+            logger.error("Failed to step miners")
         if len(valid_responses) == 0:
             logger.error("No valid responses found")
             return
@@ -122,17 +138,26 @@ class Validator(base.BaseValidator):
             )
             scores: list[float] = score_response.json()["scores"]
             logger.info(f"Updating miner manager with {len(scores)} scores")
-            self.miner_manager.step(scores, valid_uids)
+            await self.miner_manager_client.post(
+                "/api/step",
+                json={
+                    "scores": scores,
+                    "total_uids": valid_uids,
+                },
+            )
 
-    def set_weights(self):
+    async def set_weights(self):
         self.current_block = self.subtensor.get_current_block()
         self.last_update = self.metagraph.last_update[self.uid]
-        weights = self.miner_manager.weights
+        response = await self.miner_manager_client.get("/api/weights")
+        response_json = response.json()
+        weights = response_json["weights"]
+        uids = response_json["uids"]
         (
             processed_weight_uids,
             processed_weights,
         ) = bt.utils.weight_utils.process_weights_for_netuid(
-            uids=self.metagraph.uids,
+            uids=uids,
             weights=weights,
             netuid=self.config.netuid,
             subtensor=self.subtensor,

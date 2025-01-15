@@ -4,6 +4,7 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from starlette.responses import StreamingResponse
 from typing import Optional
 from .global_config import CONFIG
+import json
 
 
 class Credit(Synapse):
@@ -15,9 +16,7 @@ class Credit(Synapse):
 
 
 class MinerPayload(BaseModel):
-    model: str = Field(
-        description="The model to be used for the miner", default="gpt-4o-mini"
-    )
+    model: str = Field(description="The model to be used for the miner", default="")
     messages: list[dict] = Field(
         description="The messages to be sent to the miner", default=[]
     )
@@ -81,22 +80,23 @@ class ChatStreamingProtocol(StreamingSynapse):
     @property
     def completion(self):
         return "".join([r.choices[0].delta.content for r in self.streaming_chunks])
-
     async def process_streaming_response(self, response: StreamingResponse):
         async for line in response.content:
             line = line.decode("utf-8")
             if line.startswith("data: "):
                 data = line[6:].strip()  # Remove 'data: ' prefix
                 if data == "[DONE]":
-                    print("DONE")
+                    print("DONE") 
                     break
                 try:
-                    chunk = MinerResponse.model_validate_json(data)
+                    data = json.loads(data)
+                    chunk = MinerResponse(**data)
                     self.streaming_chunks.append(chunk)
                     yield chunk
                 except Exception as e:
                     print("Error", e)
-                    break  # Skip invalid chunks
+                    print("Failed chunk:", data)
+                    continue  # Continue instead of break to handle invalid chunks
 
     def extract_response_json(self, response: StreamingSynapse) -> dict:
         # iterate over the response headers and extract the necessary data

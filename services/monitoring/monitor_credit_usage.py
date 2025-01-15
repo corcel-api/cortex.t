@@ -12,24 +12,6 @@ def get_bar(percentage, width=50):
     return bar
 
 
-def get_heatmap_char(value, max_value):
-    """Returns a character representing the heat level based on value."""
-    if max_value == 0:
-        return "░"
-    ratio = value / max_value
-    # Using different block characters to represent heat levels
-    if ratio >= 0.8:
-        return "█"
-    elif ratio >= 0.6:
-        return "▓"
-    elif ratio >= 0.4:
-        return "▒"
-    elif ratio >= 0.2:
-        return "░"
-    else:
-        return "⋅"
-
-
 def format_percentage(percentage):
     return f"{percentage * 100:6.2f}%"
 
@@ -40,9 +22,6 @@ def monitor_serving_counters():
         host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db
     )
 
-    # Dictionary to store historical counts
-    historical_counts = {}
-
     with term.fullscreen(), term.hidden_cursor():
         while True:
             # Get all keys matching the pattern
@@ -51,8 +30,6 @@ def monitor_serving_counters():
 
             # Filter and process keys
             counter_data = []
-            max_historical = 0
-
             for key in all_keys:
                 key = key.decode("utf-8")
                 if ":quota" in key:
@@ -68,17 +45,7 @@ def monitor_serving_counters():
                     count = int(count)
                     quota = int(quota)
                     percentage = count / quota if quota > 0 else 0
-
-                    # Update historical counts
-                    if uid not in historical_counts:
-                        historical_counts[uid] = count
-                    else:
-                        historical_counts[uid] += count
-
-                    max_historical = max(max_historical, historical_counts[uid])
-                    counter_data.append(
-                        (uid, count, quota, percentage, historical_counts[uid])
-                    )
+                    counter_data.append((uid, count, quota, percentage))
 
             # Sort by percentage
             counter_data.sort(key=lambda x: x[3], reverse=True)
@@ -87,16 +54,12 @@ def monitor_serving_counters():
             print(term.home + term.clear)
             print(term.bold("Serving Counter Monitor") + term.normal)
             print("=" * term.width)
-            print(
-                f"{'UID':>5} {'Count':>10} {'Quota':>10} {'Usage':>8} {'Bar':<50} {'History':<10}"
-            )
+            print(f"{'UID':>5} {'Count':>10} {'Quota':>10} {'Usage':>8} {'Bar':<50}")
             print("-" * term.width)
 
             # Print bars
-            for uid, count, quota, percentage, hist_count in counter_data:
+            for uid, count, quota, percentage in counter_data:
                 bar = get_bar(percentage)
-                heatmap = "".join(get_heatmap_char(hist_count, max_historical) * 10)
-
                 color = ""
                 if percentage >= 0.8:
                     color = term.red
@@ -108,8 +71,7 @@ def monitor_serving_counters():
                 print(
                     f"{uid:>5} {count:>10} {quota:>10} "
                     f"{format_percentage(percentage)} "
-                    f"{color}{bar}{term.normal} "
-                    f"{term.blue}{heatmap}{term.normal}"
+                    f"{color}{bar}{term.normal}"
                 )
 
             # Print footer

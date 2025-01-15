@@ -4,11 +4,14 @@ import random
 from typing import Tuple
 import asyncio
 import time
+from openai import AsyncOpenAI
+from loguru import logger
 
 
 class Miner(base.BaseMiner):
     def __init__(self):
         super().__init__([(self.forward_credit, self.blacklist_credit)])
+        self.client = AsyncOpenAI()
 
     async def forward_credit(self, synapse: protocol.Credit) -> protocol.Credit:
         synapse.credit = 256
@@ -18,35 +21,47 @@ class Miner(base.BaseMiner):
         return False, "Allowed"
 
     async def forward(self, synapse: protocol.ChatStreamingProtocol):
-        async def yield_token():
-            for _ in range(128):
-                await asyncio.sleep(0.5)
-                token = random.choice(["a", "b", "c", "d", "e", "f"])
-                chunk = f"""data: {{"id":"chatcmpl-ApVyQCkzQJmZIrFIO0KCmVBr4rb16","object":"chat.completion.chunk","created":1736840998,"model":"gpt-4o-2024-08-06","service_tier":"default","system_fingerprint":"fp_50cad350e4","choices":[{{"index":0,"delta":{{"content":"{token}"}},"logprobs":null,"finish_reason":null}}]}}\n"""
-                yield chunk
-
-        tokens = yield_token()
+        payload = synapse.miner_payload
+        logger.info(f"Payload: {payload}")
+        response = await self.client.chat.completions.create(
+            **payload.model_dump(),
+        )
+        logger.info(f"Response: {response}")
 
         async def stream_response(send):
-            i = 0
-            async for token in tokens:
-                i += 1
-                if i > 16:
-                    break
+            try:
+                async for chunk in response:
+                    if chunk.choices[0].delta.content:
+                        logger.debug(
+                            f"Streaming chunk: {chunk.choices[0].delta.content}"
+                        )
+                        await send(
+                            {
+                                "type": "http.response.body",
+                                "body": f"data: {chunk.model_dump_json()}\n\n".encode(
+                                    "utf-8"
+                                ),
+                                "more_body": True,
+                            }
+                        )
+                # Send the final [DONE] message
                 await send(
                     {
                         "type": "http.response.body",
-                        "body": token.encode("utf-8"),
-                        "more_body": True,
+                        "body": "data: [DONE]\n\n".encode("utf-8"),
+                        "more_body": False,
                     }
                 )
-            await send(
-                {
-                    "type": "http.response.body",
-                    "body": "[DONE]".encode("utf-8"),
-                    "more_body": False,
-                }
-            )
+            except Exception as e:
+                logger.error(f"Error in stream_response: {e}")
+                # Send error message and close the stream
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": f'data: {{"error": "{str(e)}"}}\n\n'.encode("utf-8"),
+                        "more_body": False,
+                    }
+                )
 
         return synapse.create_streaming_response(token_streamer=stream_response)
 

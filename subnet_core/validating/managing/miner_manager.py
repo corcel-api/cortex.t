@@ -15,11 +15,11 @@ import asyncio
 
 
 class MinerManager:
-    def __init__(self, uid, metagraph, wallet):
-        logger.info(f"Initializing MinerManager with uid: {uid}")
-        self.uid = uid
-        self.metagraph = metagraph
-        self.wallet = wallet
+    def __init__(self, network: str, netuid: int, wallet_name: str, wallet_hotkey: str):
+        self.subtensor = bt.subtensor(network=network)
+        self.metagraph = self.subtensor.metagraph(netuid=netuid)
+        self.wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
+        self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         logger.info(f"Connecting to Redis at {CONFIG.redis.host}:{CONFIG.redis.port}")
         self.redis_client = redis.Redis(
@@ -137,15 +137,22 @@ class MinerManager:
 
     @property
     def weights(self):
-        uids = []
-        scores = []
-        for uid, miner in self.query().items():
-            uids.append(uid)
-            scores.append(miner.accumulate_score)
+        try:
+            uids = []
+            scores = []
+            for uid, miner in self.query().items():
+                uids.append(uid)
+                scores.append(miner.accumulate_score)
 
-        scores = np.array(scores)
-        scores = scores / scores.sum()
-        credit_scales = np.array(self.credits) / CONFIG.bandwidth.max_credit
-        credit_scales[credit_scales > 1] = 1
-        scores = scores * credit_scales
-        return uids, scores
+            scores = np.array(scores)
+            if scores.sum() > 0:
+                scores = scores / scores.sum()
+            else:
+                scores = np.zeros_like(scores)
+            credit_scales = np.array(self.credits) / CONFIG.bandwidth.max_credit
+            credit_scales[credit_scales > 1] = 1
+            scores = scores * credit_scales
+            return uids, scores.tolist()
+        except Exception as e:
+            logger.error(f"Error in weights: {e}")
+            return [], []
