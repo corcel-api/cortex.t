@@ -20,6 +20,7 @@ def generate_dotenv():
         "NETUID": get_user_input("--netuid", "18"),
         "SUBTENSOR.NETWORK": get_user_input("--subtensor.network", "finney"),
         "AXON.PORT": get_user_input("--axon.port", "8000"),
+        "OPENAI_API_KEY": get_user_input("--openai.api-key", ""),
     }
 
     # Write to .env file
