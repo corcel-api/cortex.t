@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from subnet_core.protocol import ScoringRequest, ScoringResponse
+from subnet_core import CONFIG
 import bittensor as bt
 from openai import AsyncOpenAI
 import numpy as np
+import uvicorn
 from loguru import logger
 
 bt.logging.enable_default()
@@ -44,3 +46,7 @@ async def score(request: ScoringRequest):
     ]
     logger.info(f"Scores: {scores}")
     return ScoringResponse(scores=scores)
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host=CONFIG.score.host, port=CONFIG.score.port)

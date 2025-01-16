@@ -15,11 +15,11 @@ def generate_dotenv():
 
     # Get user inputs
     env_vars = {
-        "WALLET.NAME": get_user_input("--wallet.name", "default"),
-        "WALLET.HOTKEY": get_user_input("--wallet.hotkey", "default"),
+        "WALLET_NAME": get_user_input("--wallet.name", "default"),
+        "WALLET_HOTKEY": get_user_input("--wallet.hotkey", "default"),
         "NETUID": get_user_input("--netuid", "18"),
-        "SUBTENSOR.NETWORK": get_user_input("--subtensor.network", "finney"),
-        "AXON.PORT": get_user_input("--axon.port", "8000"),
+        "SUBTENSOR_NETWORK": get_user_input("--subtensor.network", "finney"),
+        "AXON_PORT": get_user_input("--axon.port", "8000"),
         "OPENAI_API_KEY": get_user_input("--openai.api-key", ""),
     }
 

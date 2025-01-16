@@ -5,6 +5,8 @@ from subnet_core import CONFIG
 import bittensor as bt
 import random
 import uvicorn
+from redis.asyncio import Redis
+import json
 
 bt.logging.enable_default()
 bt.logging.enable_info()
@@ -13,26 +15,20 @@ bt.logging.enable_trace()
 
 app = FastAPI()
 
+redis_client = Redis(host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db)
+
 
 @app.post("/synthesize")
 async def synthesize(model_config: ModelConfig):
     bt.logging.info(f"Synthesizing request received: {model_config}")
+    redis_synthetic_key = f"{CONFIG.redis.synthetic_queue_key}:{model_config.model}"
+    redis_organic_key = f"{CONFIG.redis.organic_queue_key}:{model_config.model}"
+    payload = await redis_client.lpop(redis_organic_key)
+    if not payload:
+        payload = await redis_client.lpop(redis_synthetic_key)
+    payload = json.loads(payload)
     return {
-        "miner_payload": MinerPayload(
-            model=model_config.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant.",
-                },
-                {
-                    "role": "user",
-                    "content": "Who are you?",
-                },
-            ],
-            max_tokens=model_config.max_tokens,
-            temperature=round(random.uniform(0.5, 1.0), 2),
-        ),
+        "miner_payload": MinerPayload(**payload),
     }
 
 

@@ -1,4 +1,4 @@
-from subnet_core import validating, CONFIG, base, protocol
+from subnet_core import CONFIG, base, protocol
 from subnet_core.configs.bandwidth import ModelConfig
 import bittensor as bt
 import random
@@ -12,9 +12,6 @@ import pandas as pd
 class Validator(base.BaseValidator):
     def __init__(self):
         super().__init__()
-        logger.info("Initialized miner manager")
-        self.dendrite = bt.dendrite(wallet=self.wallet)
-        logger.info("Initialized dendrite")
         self.score_client = httpx.AsyncClient(
             base_url=f"http://{CONFIG.score.host}:{CONFIG.score.port}"
         )
@@ -24,28 +21,31 @@ class Validator(base.BaseValidator):
         self.miner_manager_client = httpx.AsyncClient(
             base_url=f"http://{CONFIG.miner_manager.host}:{CONFIG.miner_manager.port}"
         )
-        logger.info(
-            f"Initialized score client with base URL: http://{CONFIG.score.host}:{CONFIG.score.port}"
+        self.w_subtensor_client = httpx.AsyncClient(
+            base_url=f"http://{CONFIG.w_subtensor.host}:{CONFIG.w_subtensor.port}"
         )
 
     async def start_epoch(self):
-        logger.info("Starting forward pass")
-        batch_size = 4
-        concurrent_batches = 1
+        batch_size = CONFIG.validating.synthetic_batch_size
+        concurrent_batches = CONFIG.validating.synthetic_concurrent_batches
+        synthetic_threshold = CONFIG.validating.synthetic_threshold
+        logger.info(
+            f"Starting forward pass - {batch_size} batch size, {concurrent_batches} concurrent batches"
+        )
         futures = []
         for _ in range(concurrent_batches):
             model_config = CONFIG.bandwidth.sample_model
             response = await self.miner_manager_client.post(
                 "/api/consume",
                 json={
-                    "threshold": 0.05,
+                    "threshold": synthetic_threshold,
                     "k": batch_size,
                     "task_credit": model_config.credit,
                 },
             )
             response_json = response.json()
             uids = response_json["uids"]
-            uids = [1]
+            logger.info(f"Synthesizing {uids} miners")
             synapse = await self.synthesize(model_config)
             futures.append(self.process_batch(uids, synapse, model_config))
         await asyncio.gather(*futures)
@@ -53,7 +53,9 @@ class Validator(base.BaseValidator):
         logger.info("Finished forward pass")
 
     async def process_batch(self, uids, synapse, model_config):
-        axons = [self.metagraph.axons[uid] for uid in uids]
+        axons_data = await self.w_subtensor_client.post("/api/axons", json=uids)
+        axons_data: list[str] = axons_data.json()
+        axons = [bt.AxonInfo.from_string(axon_data) for axon_data in axons_data]
         responses = await self.query_non_streaming(axons, synapse, model_config)
         await self.score(uids, responses, synapse)
 
@@ -144,55 +146,6 @@ class Validator(base.BaseValidator):
                     "scores": scores,
                     "total_uids": valid_uids,
                 },
-            )
-
-    async def set_weights(self):
-        self.current_block = self.subtensor.get_current_block()
-        self.last_update = self.metagraph.last_update[self.uid]
-        response = await self.miner_manager_client.get("/api/weights")
-        response_json = response.json()
-        weights = response_json["weights"]
-        uids = response_json["uids"]
-        (
-            processed_weight_uids,
-            processed_weights,
-        ) = bt.utils.weight_utils.process_weights_for_netuid(
-            uids=uids,
-            weights=weights,
-            netuid=self.config.netuid,
-            subtensor=self.subtensor,
-            metagraph=self.metagraph,
-        )
-        (
-            uint_uids,
-            uint_weights,
-        ) = bt.utils.weight_utils.convert_weights_and_uids_for_emit(
-            uids=processed_weight_uids, weights=processed_weights
-        )
-        if self.current_block > self.last_update + CONFIG.subnet_tempo:
-            weight_info = list(zip(uint_uids, uint_weights))
-            weight_info_df = pd.DataFrame(weight_info, columns=["uid", "weight"])
-            logger.info(f"Weight info:\n{weight_info_df.to_markdown()}")
-            logger.info("Actually trying to set weights.")
-            try:
-                future = self.set_weights_executor.submit(
-                    self.subtensor.set_weights,
-                    netuid=self.config.netuid,
-                    wallet=self.wallet,
-                    uids=uint_uids,
-                    weights=uint_weights,
-                )
-                success, msg = future.result(timeout=120)
-                if not success:
-                    logger.error(f"Failed to set weights: {msg}")
-            except Exception as e:
-                logger.error(f"Failed to set weights: {e}")
-                traceback.print_exc()
-
-            logger.info(f"Set weights result: {success}")
-        else:
-            logger.info(
-                f"Not setting weights because current block {self.current_block} is not greater than last update {self.last_update} + tempo {constants.SUBNET_TEMPO}"
             )
 
 

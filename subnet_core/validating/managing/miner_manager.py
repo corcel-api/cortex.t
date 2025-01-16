@@ -19,7 +19,7 @@ class MinerManager:
         self.subtensor = bt.subtensor(network=network)
         self.metagraph = self.subtensor.metagraph(netuid=netuid)
         self.wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
-        self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
+        self.uid = 0
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         logger.info(f"Connecting to Redis at {CONFIG.redis.host}:{CONFIG.redis.port}")
         self.redis_client = redis.Redis(
@@ -67,7 +67,7 @@ class MinerManager:
             metadata = self.query(uids)
             percentage_rate_limit = get_rate_limit_proportion(self.metagraph, self.uid)
             logger.info(f"Percentage rate limit: {percentage_rate_limit}")
-            if CONFIG.network == "testnet":
+            if CONFIG.subtensor_network == "test":
                 percentage_rate_limit = 1
             logger.info(f"Creating serving counters for {len(uids)} UIDs")
             self.serving_counters = {

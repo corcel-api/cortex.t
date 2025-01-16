@@ -4,6 +4,8 @@ from .score import ScoreConfig
 from .sql import SQLConfig
 from .synthesize import SynthesizeConfig
 from .miner_manager import MinerManagerConfig
+from .w_subtensor import WSubtensorConfig
+from .validating import ValidatingConfig
 
 __all__ = [
     "RedisConfig",
@@ -12,4 +14,6 @@ __all__ = [
     "SQLConfig",
     "SynthesizeConfig",
     "MinerManagerConfig",
+    "ValidatingConfig",
+    "WSubtensorConfig",
 ]

@@ -1,23 +1,24 @@
-from fastapi import FastAPI
 from dotenv import load_dotenv
+
+load_dotenv()
+from fastapi import FastAPI
 from subnet_core import CONFIG, protocol
 from fastapi.responses import StreamingResponse
 import httpx
 import bittensor as bt
-import os
 from loguru import logger
-
-load_dotenv()
+from redis.asyncio import Redis
 
 managing_client = httpx.AsyncClient(
     base_url=f"http://{CONFIG.miner_manager.host}:{CONFIG.miner_manager.port}"
 )
-
-subtensor = bt.Subtensor(network=os.getenv("SUBTENSOR.NETWORK"))
-metagraph = subtensor.metagraph(os.getenv("NETUID"))
+redis_client = Redis(host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db)
 wallet = bt.wallet(
-    name=os.getenv("WALLET.NAME"),
-    hotkey=os.getenv("WALLET.HOTKEY"),
+    name=CONFIG.wallet_name,
+    hotkey=CONFIG.wallet_hotkey,
+)
+subtensor_client = httpx.AsyncClient(
+    base_url=f"http://{CONFIG.w_subtensor.host}:{CONFIG.w_subtensor.port}"
 )
 dendrite = bt.Dendrite(wallet=wallet)
 
@@ -38,14 +39,19 @@ async def chat_completions(request: protocol.MinerPayload):
             },
         )
         uid = response.json()["uids"][0]
-        logger.info(f"Consumed {uid} miner")
         uid = 1
-
+        logger.info(f"Consumed {uid} miner")
+        # Push request to redis queue using await
+        await redis_client.rpush(
+            CONFIG.redis.organic_queue_key, request.model_dump_json()
+        )
         # Create synapse and forward request
         synapse = protocol.ChatStreamingProtocol(
             miner_payload=request,
         )
-        axon = metagraph.axons[uid]
+        axon_data = await subtensor_client.post("/api/axons", json=[uid])
+        axon = bt.AxonInfo.from_string(axon_data.json()[0])
+        logger.info(f"Forwarding request to {axon}")
         responses = await dendrite.forward(
             axons=[axon], synapse=synapse, streaming=True, timeout=12
         )
@@ -56,10 +62,7 @@ async def chat_completions(request: protocol.MinerPayload):
                 async for chunk in response:
                     if not isinstance(chunk, protocol.MinerResponse):
                         continue
-                    print(chunk)
-                    # Format response to match OpenAI streaming format
                     yield f"data: {chunk.model_dump_json()}\n\n"
-                # Send final [DONE] message
                 yield "data: [DONE]\n\n"
             except Exception as e:
                 logger.error(f"Streaming error: {e}")

@@ -13,7 +13,7 @@ class ModelConfig(BaseModel):
 class BandwidthConfig(BaseModel):
     interval: int = Field(default=60)
     min_stake: int = Field(default=10000)
-    model_cost: dict[str, ModelConfig] = {
+    model_configs: dict[str, ModelConfig] = {
         "gpt-4o-mini": ModelConfig(
             credit=4,
             model="gpt-4o-mini",
@@ -27,6 +27,6 @@ class BandwidthConfig(BaseModel):
 
     @property
     def sample_model(self) -> ModelConfig:
-        models = list(self.model_cost.values())
+        models = list(self.model_configs.values())
         weights = [model.credit for model in models]
         return random.choices(models, weights=weights, k=1)[0]
