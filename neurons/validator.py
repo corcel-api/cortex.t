@@ -45,11 +45,14 @@ class Validator(base.BaseValidator):
             )
             response_json = response.json()
             uids = response_json["uids"]
+            if not uids:
+                logger.error("No miners found")
+                continue
             logger.info(f"Synthesizing {uids} miners")
             synapse = await self.synthesize(model_config)
             futures.append(self.process_batch(uids, synapse, model_config))
         await asyncio.gather(*futures)
-        await asyncio.sleep(60)
+        await asyncio.sleep(10)
         logger.info("Finished forward pass")
 
     async def process_batch(self, uids, synapse, model_config):

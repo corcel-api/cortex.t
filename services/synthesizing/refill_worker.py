@@ -9,21 +9,41 @@ from redis import Redis
 import json
 import time
 from tqdm import tqdm
+from datasets import load_dataset
+import random
 
-
+ds = load_dataset(
+    "HuggingFaceFW/fineweb-edu", "sample-100BT", streaming=True, split="train"
+)
+ds = ds.filter(lambda x: len(x["text"]) < 3000)
+ds = iter(ds)
 redis_client = Redis(host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db)
 logger.info(f"Connected to Redis at {CONFIG.redis.host}:{CONFIG.redis.port}")
+
+# Clear existing queues on startup
+for model in CONFIG.bandwidth.model_configs.keys():
+    redis_key = f"{CONFIG.redis.synthetic_queue_key}:{model}"
+    redis_client.delete(redis_key)
+    logger.info(f"Cleared existing queue for {model}")
 
 
 def create_synthetic_payload(model_name: str):
     if model_name in ["gpt-4o", "gpt-4o-mini"]:
+        n_turn = random.randint(1, 2)
+        messages = []
+        for i in range(n_turn):
+            text = next(ds)["text"]
+            text_length = len(text)
+            user_length = int(text_length * 0.4)
+            user_content = text[:user_length]
+            assistant_content = text[user_length:]
+            messages.append({"role": "user", "content": user_content})
+            if i < n_turn - 1:
+                messages.append({"role": "assistant", "content": assistant_content})
         logger.debug(f"Creating synthetic payload for model {model_name}")
         return {
             "model": model_name,
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Who are you?"},
-            ],
+            "messages": messages,
         }
     else:
         logger.error(f"Model {model_name} not supported")
