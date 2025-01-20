@@ -4,14 +4,14 @@ load_dotenv()
 
 import bittensor as bt
 from loguru import logger
-from subnet_core import CONFIG
+from cortext import CONFIG
 from redis import Redis
 import json
 import time
 from tqdm import tqdm
 from datasets import load_dataset
 import random
-from subnet_core.protocol import MinerPayload
+from cortext.protocol import MinerPayload
 import random
 
 ds = load_dataset(

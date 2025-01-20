@@ -1,8 +1,8 @@
 from dotenv import load_dotenv
 
 load_dotenv()
-from subnet_core.validating.managing.miner_manager import MinerManager
-from subnet_core import CONFIG
+from cortext.validating.managing.miner_manager import MinerManager
+from cortext import CONFIG
 from fastapi import FastAPI
 import os
 from loguru import logger

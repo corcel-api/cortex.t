@@ -11,6 +11,7 @@ from .configs import (
 )
 from loguru import logger
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
@@ -34,10 +35,11 @@ class GlobalConfig(BaseSettings):
     wallet_name: str = "default"
     wallet_hotkey: str = "default"
     subtensor_tempo: int = 360
+    axon_port: int = 8000
 
     class Config:
         env_nested_delimiter = "__"
 
 
 CONFIG = GlobalConfig()
-logger.info(f"GlobalConfig: {CONFIG}")
+logger.info("\n" + json.dumps(CONFIG.model_dump(), indent=2))

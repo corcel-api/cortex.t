@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from subnet_core.protocol import ScoringRequest, ScoringResponse
-from subnet_core import CONFIG
+from cortext.protocol import ScoringRequest, ScoringResponse
+from cortext import CONFIG
 import bittensor as bt
 from openai import AsyncOpenAI
 import numpy as np

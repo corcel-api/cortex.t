@@ -1,5 +1,5 @@
-from subnet_core import CONFIG, base, protocol
-from subnet_core.configs.bandwidth import ModelConfig
+from cortext import CONFIG, base, protocol
+from cortext.configs.bandwidth import ModelConfig
 import bittensor as bt
 import random
 import httpx

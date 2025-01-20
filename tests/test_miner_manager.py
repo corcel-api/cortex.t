@@ -1,4 +1,4 @@
-from subnet_core import protocol
+from cortext import protocol
 from neurons.validator import Validator
 import bittensor as bt
 import asyncio

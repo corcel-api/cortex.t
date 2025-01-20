@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from subnet_core.configs.bandwidth import ModelConfig
-from subnet_core.protocol import MinerPayload
-from subnet_core import CONFIG
+from cortext.configs.bandwidth import ModelConfig
+from cortext.protocol import MinerPayload
+from cortext import CONFIG
 import bittensor as bt
 import random
 import uvicorn

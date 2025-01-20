@@ -1,7 +1,7 @@
 from blessed import Terminal
 import redis
 import time
-from subnet_core import CONFIG
+from cortext import CONFIG
 import math
 
 

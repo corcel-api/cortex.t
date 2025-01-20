@@ -7,7 +7,7 @@ import os
 from loguru import logger
 from concurrent.futures import ThreadPoolExecutor
 import time
-from subnet_core import CONFIG
+from cortext import CONFIG
 import httpx
 import traceback
 from fastapi import FastAPI, APIRouter

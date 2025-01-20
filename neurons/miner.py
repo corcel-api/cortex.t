@@ -1,4 +1,4 @@
-from subnet_core import base, protocol, CONFIG
+from cortext import base, protocol, CONFIG
 import bittensor as bt
 import random
 from typing import Tuple

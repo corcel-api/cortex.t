@@ -1,5 +1,5 @@
-from subnet_core import protocol
-from subnet_core.base import BaseValidator
+from cortext import protocol
+from cortext.base import BaseValidator
 import bittensor as bt
 import asyncio
 

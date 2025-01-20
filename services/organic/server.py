@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 from fastapi import FastAPI
-from subnet_core import CONFIG, protocol
+from cortext import CONFIG, protocol
 from fastapi.responses import StreamingResponse
 import httpx
 import bittensor as bt
