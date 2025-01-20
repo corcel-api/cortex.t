@@ -11,6 +11,8 @@ import time
 from tqdm import tqdm
 from datasets import load_dataset
 import random
+from subnet_core.protocol import MinerPayload
+import random
 
 ds = load_dataset(
     "HuggingFaceFW/fineweb-edu", "sample-100BT", streaming=True, split="train"
@@ -66,7 +68,12 @@ while True:
             pbar = tqdm(range(needed), desc=f"Refilling {model} pool")
             for _ in pbar:
                 payload = create_synthetic_payload(model)
-                redis_client.rpush(redis_key, json.dumps(payload))
+                payload = MinerPayload(
+                    **payload,
+                    seed=random.randint(0, 1000000),
+                    temperature=random.random() * 1.2,
+                )
+                redis_client.rpush(redis_key, payload.model_dump_json())
         else:
             logger.info(f"Pool for {model} is full")
 

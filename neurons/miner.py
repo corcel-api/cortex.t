@@ -4,14 +4,15 @@ import random
 from typing import Tuple
 import asyncio
 import time
-from openai import AsyncOpenAI
+import httpx
 from loguru import logger
+import os
 
 
 class Miner(base.BaseMiner):
     def __init__(self):
         super().__init__([(self.forward_credit, self.blacklist_credit)])
-        self.client = AsyncOpenAI()
+        self.client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
 
     async def forward_credit(self, synapse: protocol.Credit) -> protocol.Credit:
         synapse.credit = 256
@@ -23,24 +24,23 @@ class Miner(base.BaseMiner):
     async def forward(self, synapse: protocol.ChatStreamingProtocol):
         payload = synapse.miner_payload
         logger.info(f"Payload: {payload}")
-        response = await self.client.chat.completions.create(
-            **payload.model_dump(),
+        response = await self.client.post(
+            "/chat/completions",
+            json=payload.model_dump(),
+            headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"},
+            timeout=60.0,
         )
         logger.info(f"Response: {response}")
 
         async def stream_response(send):
             try:
-                async for chunk in response:
-                    if chunk.choices[0].delta.content:
-                        logger.debug(
-                            f"Streaming chunk: {chunk.choices[0].delta.content}"
-                        )
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        logger.debug(f"Streaming chunk: {line}")
                         await send(
                             {
                                 "type": "http.response.body",
-                                "body": f"data: {chunk.model_dump_json()}\n\n".encode(
-                                    "utf-8"
-                                ),
+                                "body": f"{line}\n".encode("utf-8"),
                                 "more_body": True,
                             }
                         )

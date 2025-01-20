@@ -32,6 +32,7 @@ class MinerPayload(BaseModel):
         description="The frequency penalty to be used for the miner", default=0.0
     )
     stream: bool = Field(description="Whether to stream the response", default=True)
+    seed: int = Field(description="The seed to be used for the miner", default=42)
 
 
 class ChoiceDelta(BaseModel):
@@ -52,6 +53,9 @@ class MinerResponse(BaseModel):
     created: int = Field(description="When the response was created")
     model: str = Field(description="The model used for the response")
     object: str = Field(description="The object type")
+    system_fingerprint: Optional[str] = Field(
+        description="The system fingerprint of the choice", default="fp_31415"
+    )
 
 
 class ScoringRequest(BaseModel):
@@ -80,17 +84,20 @@ class ChatStreamingProtocol(StreamingSynapse):
     @property
     def completion(self):
         return "".join([r.choices[0].delta.content for r in self.streaming_chunks])
+
     async def process_streaming_response(self, response: StreamingResponse):
         async for line in response.content:
             line = line.decode("utf-8")
             if line.startswith("data: "):
                 data = line[6:].strip()  # Remove 'data: ' prefix
                 if data == "[DONE]":
-                    print("DONE") 
+                    print("DONE")
                     break
                 try:
                     data = json.loads(data)
                     chunk = MinerResponse(**data)
+                    if not chunk.choices[0].delta.content:
+                        continue
                     self.streaming_chunks.append(chunk)
                     yield chunk
                 except Exception as e:
