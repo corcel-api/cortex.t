@@ -8,6 +8,7 @@ import httpx
 import bittensor as bt
 from loguru import logger
 from redis.asyncio import Redis
+import uvicorn
 
 managing_client = httpx.AsyncClient(
     base_url=f"http://{CONFIG.miner_manager.host}:{CONFIG.miner_manager.port}"
@@ -51,9 +52,11 @@ async def chat_completions(request: protocol.MinerPayload):
         )
         axon_data = await subtensor_client.post("/api/axons", json=[uid])
         axon = bt.AxonInfo.from_string(axon_data.json()[0])
+        axon.ip = "149.28.139.101"
+        axon.port = 9999
         logger.info(f"Forwarding request to {axon}")
         responses = await dendrite.forward(
-            axons=[axon], synapse=synapse, streaming=True, timeout=12
+            axons=[axon], synapse=synapse, streaming=True, timeout=64
         )
         response = responses[0]
 
@@ -84,3 +87,7 @@ async def chat_completions(request: protocol.MinerPayload):
     except Exception as e:
         logger.error(f"Request error: {e}")
         return {"error": {"message": str(e), "type": "request_error"}}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host=CONFIG.organic.host, port=CONFIG.organic.port)

@@ -19,6 +19,7 @@ class BaseMiner(ABC):
     def get_config(self):
         parser = argparse.ArgumentParser()
         parser = add_common_config(parser)
+        parser.add_argument("--miner.total_credit", type=int, default=128)
         config = bt.config(parser)
         config.full_path = os.path.expanduser(
             "{}/{}/{}/netuid{}/{}".format(
@@ -39,7 +40,7 @@ class BaseMiner(ABC):
         self.axon = bt.axon(config=self.config)
         for forward_fn, blacklist_fn in self.attach_fns:
             self.axon.attach(forward_fn=forward_fn, blacklist_fn=blacklist_fn)
-        self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
+        # self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
         self.axon.start()
 
     def chain_sync(self):

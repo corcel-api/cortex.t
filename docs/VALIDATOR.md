@@ -54,6 +54,7 @@ pm2 start python --name "cortex_w_subtensor" -- -m services.subtensor_syncing.se
 pm2 start python --name "cortex_scoring" -- -m services.scoring.server
 pm2 start python --name "cortex_synthesizing" -- -m services.synthesizing.server
 pm2 start python --name "cortex_managing" -- -m services.managing.server
+pm2 start python --name "cortex_synthesizing_worker" -- -m services.synthesizing.refill_worker
 ```
 
 4. Run main validating proccess:

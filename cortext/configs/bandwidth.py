@@ -21,6 +21,13 @@ class BandwidthConfig(BaseModel):
             synapse_type="streaming-chat",
             timeout=12,
         ),
+        "dall-e-3": ModelConfig(
+            credit=1,
+            model="dall-e-3",
+            timeout=12,
+            synapse_type="image-request",
+            max_tokens=1024,
+        ),
     }
     min_credit: int = Field(default=128)
     max_credit: int = Field(default=1024)

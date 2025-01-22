@@ -9,7 +9,7 @@ import random
 from .sql_schemas import Base, MinerMetadata
 from .serving_counter import ServingCounter
 from ...global_config import CONFIG
-from ...ultilities.rate_limit import get_rate_limit_proportion
+from ...utilities.rate_limit import get_rate_limit_proportion
 from ...protocol import Credit
 import asyncio
 

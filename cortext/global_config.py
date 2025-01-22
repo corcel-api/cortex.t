@@ -8,6 +8,7 @@ from .configs import (
     MinerManagerConfig,
     ValidatingConfig,
     WSubtensorConfig,
+    OrganicConfig,
 )
 from loguru import logger
 from dotenv import load_dotenv
@@ -30,6 +31,7 @@ class GlobalConfig(BaseSettings):
         synthetic_concurrent_batches=4,
     )
     w_subtensor: WSubtensorConfig = WSubtensorConfig(host="localhost", port=8104)
+    organic: OrganicConfig = OrganicConfig(host="localhost", port=8105)
     subtensor_network: str = "finney"
     subtensor_netuid: int = 18
     wallet_name: str = "default"

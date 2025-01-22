@@ -10,11 +10,12 @@ class ServingCounter:
         quota: int,
         uid: int,
         redis_client: redis.Redis,
+        postfix_key: str = "",
     ):
         self.quota = quota
         self.redis_client = redis_client
-        self.key = f"{CONFIG.redis.miner_manager_key}:{uid}"
-        self.quota_key = f"{CONFIG.redis.miner_manager_key}:{uid}:quota"
+        self.key = f":{CONFIG.redis.miner_manager_key}:{postfix_key}:{uid}"
+        self.quota_key = f"{CONFIG.redis.miner_manager_key}:{postfix_key}:quota:{uid}"
         self.redis_client.set(self.quota_key, quota)
 
     def increment(self, amount: int = 1, ignore_threshold: float = None) -> bool:
@@ -49,6 +50,7 @@ class ServingCounter:
             self.redis_client.expire(self.key, CONFIG.bandwidth.interval)
 
         if count <= self.quota:
+            logger.info(f"Consumed {count} of {self.quota} for {self.key}")
             return True
 
         logger.info(

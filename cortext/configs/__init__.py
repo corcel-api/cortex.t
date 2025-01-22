@@ -6,6 +6,7 @@ from .synthesize import SynthesizeConfig
 from .miner_manager import MinerManagerConfig
 from .w_subtensor import WSubtensorConfig
 from .validating import ValidatingConfig
+from .organic import OrganicConfig
 
 __all__ = [
     "RedisConfig",
@@ -15,5 +16,6 @@ __all__ = [
     "SynthesizeConfig",
     "MinerManagerConfig",
     "ValidatingConfig",
+    "OrganicConfig",
     "WSubtensorConfig",
 ]

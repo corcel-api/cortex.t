@@ -88,6 +88,7 @@ class ChatStreamingProtocol(StreamingSynapse):
     async def process_streaming_response(self, response: StreamingResponse):
         async for line in response.content:
             line = line.decode("utf-8")
+            print(line)
             if line.startswith("data: "):
                 data = line[6:].strip()  # Remove 'data: ' prefix
                 if data == "[DONE]":
@@ -138,3 +139,103 @@ class ChatStreamingProtocol(StreamingSynapse):
         if not len(self.completion):
             return False
         return True
+
+
+class ImagePrompt(BaseModel):
+    """
+    Dall-E 3 prompt with parameters
+    - <prompt> --ar 16:9 --q hd --style natural
+    This class parses image generation prompts with optional parameters
+    """
+
+    prompt: str = Field(description="The main prompt text for image generation")
+    size: str = Field(
+        description="Size: [1024x1024, 1792x1024, 1024x1792]", default="1024x1024"
+    )
+    quality: str = Field(
+        description="Image quality setting (hd, standard)", default="hd"
+    )
+    style: str = Field(description="Visual style modifier", default="natural")
+
+    model: str = Field(
+        description="Model to use for image generation", default="dall-e-3"
+    )
+
+    @validator("prompt")
+    def validate_prompt(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Prompt cannot be empty")
+        return v.strip()
+
+    @validator("size")
+    def validate_size(cls, v):
+        valid_sizes = ["1024x1024", "1792x1024", "1024x1792"]
+        if v not in valid_sizes:
+            raise ValueError(f"Invalid size. Must be one of: {valid_sizes}")
+        return v
+
+    @validator("quality")
+    def validate_quality(cls, v):
+        valid_qualities = ["hd", "standard"]
+        if v not in valid_qualities:
+            raise ValueError(f"Invalid quality. Must be one of: {valid_qualities}")
+        return v
+
+    def to_string(self) -> str:
+        """Convert the prompt and parameters to a command-line style string"""
+        return f"{self.prompt} --ar {self.size} --q {self.quality} --style {self.style} --model {self.model}"
+
+    @classmethod
+    def from_string(cls, prompt_str: str) -> "ImagePrompt":
+        """Parse a command-line style string into an ImagePrompt instance"""
+        parts = prompt_str.split()
+        params = {
+            "prompt": [],
+            "size": "1024x1024",
+            "quality": "hd",
+            "style": "natural",
+            "model": "dall-e-3",
+        }
+
+        i = 0
+        while i < len(parts):
+            if parts[i].startswith("--"):
+                param = parts[i][2:]
+                if i + 1 >= len(parts):
+                    raise ValueError(f"Missing value for parameter: {param}")
+
+                if param == "ar":
+                    params["size"] = parts[i + 1]
+                elif param == "q":
+                    params["quality"] = parts[i + 1]
+                elif param == "style":
+                    params["style"] = parts[i + 1]
+                elif param == "model":
+                    params["model"] = parts[i + 1]
+                i += 2
+            else:
+                params["prompt"].append(parts[i])
+                i += 1
+
+        params["prompt"] = " ".join(params["prompt"])
+        return cls(**params)
+
+    @classmethod
+    def mimic_chat_completion_chunk(cls, url: str) -> ChatCompletionChunk:
+        data = {
+            "id": "image-request",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": url},
+                    "logprobs": {},
+                    "finish_reason": "stop",
+                }
+            ],
+            "created": 0,
+            "model": "",
+            "object": "chat.completion.chunk",
+            "system_fingerprint": "fp_31415",
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        }
+        return ChatCompletionChunk(**data)
