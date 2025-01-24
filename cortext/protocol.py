@@ -5,6 +5,7 @@ from starlette.responses import StreamingResponse
 from typing import Optional
 from .global_config import CONFIG
 import json
+import base64
 
 
 class Credit(Synapse):
@@ -26,10 +27,6 @@ class MinerPayload(BaseModel):
     max_tokens: int = Field(
         description="The maximum number of tokens to be used for the miner",
         default=4096,
-    )
-    top_p: float = Field(description="The top p to be used for the miner", default=1.0)
-    frequency_penalty: float = Field(
-        description="The frequency penalty to be used for the miner", default=0.0
     )
     stream: bool = Field(description="Whether to stream the response", default=True)
     seed: int = Field(description="The seed to be used for the miner", default=42)
@@ -140,6 +137,22 @@ class ChatStreamingProtocol(StreamingSynapse):
             return False
         return True
 
+    def to_headers(self) -> dict:
+        # Get base headers from parent class
+        headers = super().to_headers()
+
+        # Add model information from miner_payload if available
+        if self.miner_payload and self.miner_payload.model:
+            headers["bt_header_input_obj_miner_payload"] = base64.b64encode(
+                json.dumps(
+                    {
+                        "model": self.miner_payload.model,
+                    }
+                ).encode("utf-8")
+            ).decode()
+
+        return headers
+
 
 class ImagePrompt(BaseModel):
     """
@@ -220,22 +233,34 @@ class ImagePrompt(BaseModel):
         params["prompt"] = " ".join(params["prompt"])
         return cls(**params)
 
-    @classmethod
-    def mimic_chat_completion_chunk(cls, url: str) -> ChatCompletionChunk:
-        data = {
-            "id": "image-request",
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"content": url},
-                    "logprobs": {},
-                    "finish_reason": "stop",
-                }
-            ],
-            "created": 0,
-            "model": "",
-            "object": "chat.completion.chunk",
-            "system_fingerprint": "fp_31415",
-            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-        }
-        return ChatCompletionChunk(**data)
+
+def mimic_chat_completion_chunk(
+    content: str,
+    id: str = "",
+    model: str = "",
+    created: int = 0,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+) -> ChatCompletionChunk:
+    data = {
+        "id": id,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"content": content},
+                "logprobs": {},
+                "finish_reason": "stop",
+            }
+        ],
+        "created": created,
+        "model": model,
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp_31415",
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        },
+    }
+    return ChatCompletionChunk(**data)

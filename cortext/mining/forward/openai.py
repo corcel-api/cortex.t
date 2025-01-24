@@ -1,6 +1,6 @@
 from httpx import AsyncClient
 import os
-from ...protocol import ImagePrompt
+from ...protocol import ImagePrompt, mimic_chat_completion_chunk
 import json
 import asyncio
 from typing import AsyncIterator
@@ -34,7 +34,7 @@ async def forward(client: AsyncClient, payload: dict):
             timeout=60.0,
         )
         url = response.json()["data"][0]["url"]
-        chunk = ImagePrompt.mimic_chat_completion_chunk(url)
+        chunk = mimic_chat_completion_chunk(url)
 
         # Create a mock response object that implements aiter_lines
         class MockResponse:
@@ -43,3 +43,6 @@ async def forward(client: AsyncClient, payload: dict):
                     yield line
 
         return MockResponse()
+    else:
+        logger.error(f"Model {model} not supported in openai")
+        return None

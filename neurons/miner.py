@@ -16,7 +16,10 @@ import traceback
 class Miner(base.BaseMiner):
     def __init__(self):
         super().__init__([(self.forward_credit, self.blacklist_credit)])
-        self.client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        self.openai_client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        self.anthropic_client = httpx.AsyncClient(
+            base_url="https://api.anthropic.com/v1"
+        )
         self.redis = redis.Redis(host=CONFIG.redis.host, port=CONFIG.redis.port)
         self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
 
@@ -88,9 +91,17 @@ class Miner(base.BaseMiner):
     async def forward(self, synapse: protocol.ChatStreamingProtocol):
         payload = synapse.miner_payload
         logger.info(f"Payload: {payload}")
-        response = await mining.forward.openai.forward(
-            self.client, payload.model_dump()
-        )
+        if payload.model in ["gpt-4o-mini", "gpt-4o"]:
+            response = await mining.forward.openai(
+                self.openai_client, payload.model_dump()
+            )
+        elif payload.model in ["claude-3-5-sonnet-20241022"]:
+            response = await mining.forward.claude(
+                self.anthropic_client, payload.model_dump()
+            )
+        else:
+            logger.error(f"Model {payload.model} not supported")
+            return synapse
         logger.info(f"Response: {response}")
 
         async def stream_response(send):
@@ -119,12 +130,14 @@ class Miner(base.BaseMiner):
         return synapse.create_streaming_response(token_streamer=stream_response)
 
     def blacklist(self, synapse: protocol.ChatStreamingProtocol) -> Tuple[bool, str]:
+        logger.info(f"Blacklisting {synapse}")
         hotkey = synapse.dendrite.hotkey
         uid = self.metagraph.hotkeys.index(hotkey)
         stake = self.metagraph.S[uid]
         if stake < CONFIG.bandwidth.min_stake:
             return True, "Stake too low."
-        allowed = self.rate_limits[uid].increment()
+        cost = CONFIG.bandwidth.model_configs[synapse.miner_payload.model].credit
+        allowed = self.rate_limits[uid].increment(amount=cost)
         if not allowed:
             return True, "Rate limit exceeded."
         return False, ""
