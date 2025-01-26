@@ -1,9 +1,11 @@
 import numpy as np
 from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
+from cortext import CONFIG
+import os
 
 OPENAI_CLIENT = AsyncOpenAI()
-ANTHROPIC_CLIENT = AsyncAnthropic()
+ANTHROPIC_CLIENT = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -16,6 +18,11 @@ async def create_ground_truth(payload: dict) -> str:
     payload["stream"] = False
 
     if "claude" in payload["model"]:
+        payload = {
+            k: v
+            for k, v in payload.items()
+            if k in CONFIG.bandwidth.model_configs[payload["model"]].allowed_params
+        }
         output = await ANTHROPIC_CLIENT.messages.create(**payload)
         return output.content[0].text
     elif "gpt" in payload["model"]:
@@ -28,4 +35,4 @@ async def create_ground_truth(payload: dict) -> str:
 async def create_embeddings(payload: dict) -> np.ndarray:
     """Create embeddings for a given text."""
     output = await OPENAI_CLIENT.embeddings.create(**payload)
-    return output.data[0].embedding
+    return [d.embedding for d in output.data]

@@ -15,6 +15,7 @@ class MockOpenAICompatibleResponse:
 
     async def aiter_lines(self):
         for chunk in self.response.iter_text():
+            logger.info(f"Received chunk: {chunk}")
             if not chunk:
                 continue
 

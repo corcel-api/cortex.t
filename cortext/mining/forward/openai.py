@@ -9,9 +9,8 @@ from loguru import logger
 
 async def mock_stream_response(chunk: str) -> AsyncIterator[str]:
     # Yield the chunk with proper SSE format
-    yield f"data: {chunk}"
-    # Yield the [DONE] message
-    yield "data: [DONE]"
+    yield f"data: {chunk}\n\n"
+    yield "data: [DONE]\n\n"
 
 
 async def forward(client: AsyncClient, payload: dict):
@@ -40,6 +39,7 @@ async def forward(client: AsyncClient, payload: dict):
         class MockResponse:
             async def aiter_lines(self):
                 async for line in mock_stream_response(chunk.model_dump_json()):
+                    logger.info(f"Yielding line: {line} in Dall-E-3")
                     yield line
 
         return MockResponse()

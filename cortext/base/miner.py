@@ -30,6 +30,7 @@ class BaseMiner(ABC):
                 "validator",
             )
         )
+        print(config)
         os.makedirs(config.full_path, exist_ok=True)
         return config
 
@@ -40,7 +41,7 @@ class BaseMiner(ABC):
         self.axon = bt.axon(config=self.config)
         for forward_fn, blacklist_fn in self.attach_fns:
             self.axon.attach(forward_fn=forward_fn, blacklist_fn=blacklist_fn)
-        # self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
+        self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
         self.axon.start()
 
     def chain_sync(self):

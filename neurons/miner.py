@@ -83,6 +83,7 @@ class Miner(base.BaseMiner):
 
     async def forward_credit(self, synapse: protocol.Credit) -> protocol.Credit:
         synapse.credit = self.config.miner.total_credit
+        logger.info(f"Returning credit: {synapse.credit}")
         return synapse
 
     async def blacklist_credit(self, synapse: protocol.Credit) -> Tuple[bool, str]:
@@ -91,7 +92,7 @@ class Miner(base.BaseMiner):
     async def forward(self, synapse: protocol.ChatStreamingProtocol):
         payload = synapse.miner_payload
         logger.info(f"Payload: {payload}")
-        if payload.model in ["gpt-4o-mini", "gpt-4o"]:
+        if payload.model in ["gpt-4o-mini", "gpt-4o", "dall-e-3"]:
             response = await mining.forward.openai(
                 self.openai_client, payload.model_dump()
             )

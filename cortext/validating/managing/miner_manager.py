@@ -42,8 +42,7 @@ class MinerManager:
         uids = self.metagraph.uids.tolist()
         axons = self.metagraph.axons
         responses = await self.dendrite.forward(
-            axons=axons,
-            synapse=Credit(),
+            axons=axons, synapse=Credit(), timeout=16
         )
         metadata = self.query(uids)
         credits = []
@@ -107,7 +106,15 @@ class MinerManager:
     def consume(self, threshold: float, k: int, task_credit: int):
         logger.info(f"Consuming {task_credit} credit for {k} miners")
         logger.info(f"Credits: {self.credits}")
-        uids = random.choices(self.uids, weights=self.credits, k=k)
+        total_credit = sum(self.credits)
+        if total_credit == 0:
+            return []
+        probabilities = np.array(self.credits) / total_credit
+        max_available_uid = len([weight for weight in probabilities if weight > 0])
+        k = min(k, max_available_uid)
+        uids = np.random.choice(
+            self.uids, size=k, replace=False, p=probabilities
+        ).tolist()
         consume_results = []
         for uid in uids:
             consume_results.append(
@@ -151,7 +158,9 @@ class MinerManager:
                 scores = np.zeros_like(scores)
             credit_scales = np.array(self.credits) / CONFIG.bandwidth.max_credit
             credit_scales[credit_scales > 1] = 1
-            scores = scores * credit_scales
+            for uid, credit_scale in zip(uids, credit_scales):
+                logger.info(f"Credit scale for UID {uid}: {credit_scale}")
+                scores[uid] = scores[uid] * credit_scale
             return uids, scores.tolist()
         except Exception as e:
             logger.error(f"Error in weights: {e}")

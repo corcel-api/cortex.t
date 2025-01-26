@@ -21,9 +21,7 @@ class MinerMetadata(Base):
         )
 
     def set_credit(self, credit: int):
-        correct_credit = max(
-            min(credit, CONFIG.bandwidth.max_credit), CONFIG.bandwidth.min_credit
-        )
+        correct_credit = credit if credit >= CONFIG.bandwidth.min_credit else 0
         logger.info(f"{self.uid}: {self.credit} -> {correct_credit}")
         self.credit = correct_credit
 

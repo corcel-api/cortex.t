@@ -11,7 +11,7 @@ import time
 from tqdm import tqdm
 from datasets import load_dataset
 import random
-from cortext.protocol import MinerPayload
+from cortext.protocol import MinerPayload, ImagePrompt
 import random
 
 ds = load_dataset(
@@ -30,7 +30,7 @@ for model in CONFIG.bandwidth.model_configs.keys():
 
 
 def create_synthetic_payload(model_name: str):
-    if model_name in ["gpt-4o", "gpt-4o-mini"]:
+    if model_name in ["gpt-4o", "claude-3-5-sonnet-20241022"]:
         n_turn = random.randint(1, 2)
         messages = []
         for i in range(n_turn):
@@ -42,11 +42,32 @@ def create_synthetic_payload(model_name: str):
             messages.append({"role": "user", "content": user_content})
             if i < n_turn - 1:
                 messages.append({"role": "assistant", "content": assistant_content})
-        logger.debug(f"Creating synthetic payload for model {model_name}")
         return {
             "model": model_name,
             "messages": messages,
+            "seed": random.randint(0, 1000000),
+            "temperature": round(random.random() * 0.4, 2),
         }
+    elif model_name in ["dall-e-3"]:
+        text = next(ds)["text"]
+        sentences = text.split(".")
+        sentences = [s for s in sentences if len(s) > 2]
+        caption = random.choice(sentences)
+        size = random.choice(["1024x1024", "1792x1024", "1024x1792"])
+        style = random.choice(["natural", "vivid"])
+        quality = random.choice(["standard", "hd"])
+        prompt = ImagePrompt(
+            prompt=caption,
+            size=size,
+            style=style,
+            quality=quality,
+        )
+        prompt = prompt.to_string()
+        return {
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+
     else:
         logger.error(f"Model {model_name} not supported")
         raise ValueError(f"Model {model_name} not supported")
@@ -70,8 +91,6 @@ while True:
                 payload = create_synthetic_payload(model)
                 payload = MinerPayload(
                     **payload,
-                    seed=random.randint(0, 1000000),
-                    temperature=random.random() * 1.2,
                 )
                 redis_client.rpush(redis_key, payload.model_dump_json())
         else:

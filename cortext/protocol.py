@@ -85,11 +85,9 @@ class ChatStreamingProtocol(StreamingSynapse):
     async def process_streaming_response(self, response: StreamingResponse):
         async for line in response.content:
             line = line.decode("utf-8")
-            print(line)
             if line.startswith("data: "):
                 data = line[6:].strip()  # Remove 'data: ' prefix
                 if data == "[DONE]":
-                    print("DONE")
                     break
                 try:
                     data = json.loads(data)

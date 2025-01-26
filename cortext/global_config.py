@@ -26,9 +26,9 @@ class GlobalConfig(BaseSettings):
     synthesize: SynthesizeConfig = SynthesizeConfig(host="localhost", port=8102)
     miner_manager: MinerManagerConfig = MinerManagerConfig(host="localhost", port=8103)
     validating: ValidatingConfig = ValidatingConfig(
-        synthetic_threshold=0.1,
+        synthetic_threshold=0.2,
         synthetic_batch_size=4,
-        synthetic_concurrent_batches=4,
+        synthetic_concurrent_batches=1,
     )
     w_subtensor: WSubtensorConfig = WSubtensorConfig(host="localhost", port=8104)
     organic: OrganicConfig = OrganicConfig(host="localhost", port=8105)

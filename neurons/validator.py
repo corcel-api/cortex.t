@@ -7,6 +7,7 @@ import asyncio
 from loguru import logger
 import traceback
 import pandas as pd
+import time
 
 
 class Validator(base.BaseValidator):
@@ -24,6 +25,33 @@ class Validator(base.BaseValidator):
         self.w_subtensor_client = httpx.AsyncClient(
             base_url=f"http://{CONFIG.w_subtensor.host}:{CONFIG.w_subtensor.port}"
         )
+
+    async def periodically_set_weights(self):
+        while not self.should_exit:
+            result = await self.w_subtensor_client.post(
+                "/api/set_weights",
+            )
+            result = result.json()
+            logger.info(f"Set weights result: {result}")
+            if result["success"]:
+                logger.info("Resetting scored_uids after setting weights successfully")
+                self.scored_uids = []
+            await asyncio.sleep(600)
+
+    async def run(self):
+        logger.info("Starting validator loop.")
+        asyncio.create_task(self.periodically_set_weights())
+        logger.info("Resetting scored_uids")
+        self.scored_uids = []
+        while not self.should_exit:
+            try:
+                await self.start_epoch()
+            except Exception as e:
+                logger.error(f"Forward error: {e}")
+                traceback.print_exc()
+            except KeyboardInterrupt:
+                logger.success("Validator killed by keyboard interrupt.")
+                exit()
 
     async def start_epoch(self):
         batch_size = CONFIG.validating.synthetic_batch_size
@@ -49,14 +77,16 @@ class Validator(base.BaseValidator):
                 if not uids:
                     logger.error("No miners found")
                     continue
+                logger.info(f"Forwarding - {uids} - {model_config.model}")
                 synapse = await self.synthesize(model_config)
                 futures.append(self.process_batch(uids, synapse, model_config))
+                await asyncio.sleep(2)
             except Exception as e:
                 logger.error(f"Error in start_epoch: {str(e)}")
                 continue
 
         await asyncio.gather(*futures)
-        await asyncio.sleep(10)
+        await asyncio.sleep(32)
 
     async def process_batch(self, uids, synapse, model_config):
         try:
@@ -64,6 +94,7 @@ class Validator(base.BaseValidator):
             axons_data: list[str] = axons_data.json()
             axons = [bt.AxonInfo.from_string(axon_data) for axon_data in axons_data]
             responses = await self.query_non_streaming(axons, synapse, model_config)
+            logger.info(f"Received {len(responses)} responses")
             await self.score(uids, responses, synapse)
         except Exception as e:
             logger.error(f"Error in process_batch: {str(e)}")
@@ -109,12 +140,16 @@ class Validator(base.BaseValidator):
 
     async def load_streaming_response(self, response) -> protocol.ChatStreamingProtocol:
         try:
+            start_time = time.time()
             async for chunk in response:
+                logger.info(f"Loading Streaming Response - {time.time() - start_time}s")
                 continue
+            end_time = time.time()
+            chunk.dendrite.process_time = end_time - start_time
             return chunk
         except Exception as e:
             logger.error(f"Error in load_streaming_response: {str(e)}")
-            return None
+            return None, 0
 
     async def score(
         self,
@@ -131,9 +166,19 @@ class Validator(base.BaseValidator):
             if not response or not response.is_success or not response.verify():
                 invalid_responses.append(response)
                 invalid_uids.append(uid)
+                logger.info(
+                    f"Invalid response - {uid} - {response.dendrite.process_time}s"
+                )
+                logger.info(f"Response: {response}")
             else:
                 valid_responses.append(response)
                 valid_uids.append(uid)
+                logger.info(
+                    f"Valid response - {uid} - {response.dendrite.process_time}s"
+                )
+        logger.info(f"Valid UIDs: {valid_uids}")
+        valid_uids = list(set(valid_uids).difference(self.scored_uids))
+        logger.info(f"Valid UIDs to score: {valid_uids}")
 
         if invalid_uids:
             try:
@@ -149,7 +194,7 @@ class Validator(base.BaseValidator):
             except Exception as e:
                 logger.error(f"Error zeroing invalid miners: {str(e)}")
 
-        if not valid_responses:
+        if not valid_uids:
             return
 
         try:
@@ -162,7 +207,7 @@ class Validator(base.BaseValidator):
                 timeout=60.0,
             )
             scores: list[float] = score_response.json()["scores"]
-
+            logger.info(f"Scores: {scores}")
             await self.miner_manager_client.post(
                 "/api/step",
                 json={
@@ -170,6 +215,7 @@ class Validator(base.BaseValidator):
                     "total_uids": valid_uids,
                 },
             )
+            self.scored_uids.extend(valid_uids)
         except Exception as e:
             logger.error(f"Error in scoring valid responses: {str(e)}")
 

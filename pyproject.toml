@@ -20,6 +20,7 @@ dependencies = [
     "anyio>=4.8.0",
     "anthropic>=0.44.0",
     "pillow>=11.1.0",
+    "datasets",
 ]
 
 

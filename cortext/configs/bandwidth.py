@@ -34,7 +34,7 @@ class BandwidthConfig(BaseModel):
             credit=1,
             model="dall-e-3",
             timeout=12,
-            synapse_type="image-request",
+            synapse_type="streaming-chat",
             max_tokens=1024,
             allowed_params=["prompt", "n", "size", "response_format", "user"],
         ),

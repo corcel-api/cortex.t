@@ -22,11 +22,18 @@ async def score(request: ScoringRequest) -> ScoringResponse:
         for image_url in miner_completions:
             score = dall_e_deterministic_score(image_url)
             scores.append(score)
-    elif model in ["gpt-4o", "gpt-4o-mini"]:
+    elif model in ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet-20241022"]:
         payload["stream"] = False
         reference_completion = await create_ground_truth(payload)
         texts = [reference_completion] + miner_completions
-        embeddings = await create_embeddings(texts)
+        logger.info(f"Creating embeddings for {len(texts)} texts")
+        embeddings = await create_embeddings(
+            {
+                "input": texts,
+                "model": "text-embedding-3-large",
+            }
+        )
+        logger.info(f"Received {len(embeddings)} embeddings")
         ref_embedding = embeddings[0]
         miner_embeddings = embeddings[1:]
         scores = [
