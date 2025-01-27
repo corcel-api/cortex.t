@@ -36,7 +36,7 @@ class GlobalConfig(BaseSettings):
                 model="gpt-4o",
                 max_tokens=8096,
                 synapse_type="streaming-chat",
-                timeout=12,
+                timeout=32,
                 allowed_params=[
                     "messages",
                     "temperature",
@@ -57,7 +57,7 @@ class GlobalConfig(BaseSettings):
             "claude-3-5-sonnet-20241022": ModelConfig(
                 credit=1,
                 model="claude-3-5-sonnet-20241022",
-                timeout=12,
+                timeout=32,
                 synapse_type="streaming-chat",
                 max_tokens=8096,
                 allowed_params=[
@@ -69,8 +69,8 @@ class GlobalConfig(BaseSettings):
                 ],
             ),
         },
-        min_credit=128,
-        max_credit=1024,
+        min_credit=32,
+        max_credit=256,
     )
     score: ScoreConfig = ScoreConfig(host="localhost", port=8101, decay_factor=0.9)
     sql: SQLConfig = SQLConfig(url="sqlite:///miner_metadata.db")
@@ -78,7 +78,7 @@ class GlobalConfig(BaseSettings):
     synthesize: SynthesizeConfig = SynthesizeConfig(
         host="localhost",
         port=8102,
-        synthetic_pool_size=1024,
+        synthetic_pool_size=8096,
         organic_pool_size=1024,
     )
     miner_manager: MinerManagerConfig = MinerManagerConfig(host="localhost", port=8103)
@@ -104,4 +104,5 @@ class GlobalConfig(BaseSettings):
 
 CONFIG = GlobalConfig()
 from rich import print as rprint
+
 rprint(CONFIG.model_dump())

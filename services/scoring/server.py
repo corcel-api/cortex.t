@@ -30,6 +30,8 @@ async def score(request: ScoringRequest) -> ScoringResponse:
         payload["stream"] = False
         reference_completion = await create_ground_truth(payload)
         texts = [reference_completion] + miner_completions
+        logger.info(f"Miner completions: {miner_completions}")
+        logger.info(f"Reference completion: {reference_completion}")
         logger.info(f"Creating embeddings for {len(texts)} texts")
         embeddings = await create_embeddings(
             {

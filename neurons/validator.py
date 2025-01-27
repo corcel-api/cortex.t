@@ -8,6 +8,8 @@ from loguru import logger
 import traceback
 import pandas as pd
 import time
+import numpy as np
+from redis.asyncio import Redis
 
 
 class Validator(base.BaseValidator):
@@ -25,24 +27,31 @@ class Validator(base.BaseValidator):
         self.w_subtensor_client = httpx.AsyncClient(
             base_url=f"http://{CONFIG.w_subtensor.host}:{CONFIG.w_subtensor.port}"
         )
+        self.redis = Redis(host="localhost", port=6379, db=1)
 
     async def periodically_set_weights(self):
         while not self.should_exit:
-            result = await self.w_subtensor_client.post(
-                "/api/set_weights",
+            scored_counter = await self.get_scored_counter()
+            logger.info(
+                f"Total scored: {len(await self.redis.keys('scored_uid:*'))} in this epoch"
             )
+            scored_times = np.array(list(scored_counter.values()))
+            mean = np.mean(scored_times) if len(scored_times) > 0 else 0
+            std = np.std(scored_times) if len(scored_times) > 0 else 0
+            logger.info(f"Mean scored times per uid: {mean} ± {std}")
+            result = await self.w_subtensor_client.post("/api/set_weights", timeout=120)
             result = result.json()
             logger.info(f"Set weights result: {result}")
             if result["success"]:
                 logger.info("Resetting scored_uids after setting weights successfully")
-                self.scored_uids = []
+                await self.redis.flushdb()
             await asyncio.sleep(600)
 
     async def run(self):
         logger.info("Starting validator loop.")
         asyncio.create_task(self.periodically_set_weights())
         logger.info("Resetting scored_uids")
-        self.scored_uids = []
+        await self.redis.flushdb()
         while not self.should_exit:
             try:
                 await self.start_epoch()
@@ -80,13 +89,13 @@ class Validator(base.BaseValidator):
                 logger.info(f"Forwarding - {uids} - {model_config.model}")
                 synapse = await self.synthesize(model_config)
                 futures.append(self.process_batch(uids, synapse, model_config))
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
             except Exception as e:
                 logger.error(f"Error in start_epoch: {str(e)}")
                 continue
 
         await asyncio.gather(*futures)
-        await asyncio.sleep(32)
+        await asyncio.sleep(4)
 
     async def process_batch(self, uids, synapse, model_config):
         try:
@@ -152,6 +161,14 @@ class Validator(base.BaseValidator):
             logger.error(f"Error in load_streaming_response: {str(e)}")
             return None, 0
 
+    async def get_scored_counter(self):
+        scored_counter = {}
+        async for key in self.redis.scan_iter("scored_uid:*"):
+            uid = int(key.decode().split(":")[1])
+            count = await self.redis.get(key)
+            scored_counter[uid] = int(count)
+        return scored_counter
+
     async def score(
         self,
         uids: list[int],
@@ -178,8 +195,18 @@ class Validator(base.BaseValidator):
                     f"Valid response - {uid} - {response.dendrite.process_time}s"
                 )
         logger.info(f"Valid UIDs: {valid_uids}")
-        valid_uids = list(set(valid_uids).difference(self.scored_uids))
-        logger.info(f"Valid UIDs to score: {valid_uids}")
+
+        uid_counts = await self.get_scored_counter()
+
+        valid_uids_to_score = []
+        for uid in valid_uids:
+            if uid_counts.get(uid, 0) < 4:
+                valid_uids_to_score.append(uid)
+            else:
+                logger.info(f"Ignoring UID: {uid} - {uid_counts.get(uid, 0)}")
+        logger.info(
+            f"Valid UIDs to score (after frequency filter): {valid_uids_to_score}"
+        )
 
         if invalid_uids:
             try:
@@ -195,7 +222,7 @@ class Validator(base.BaseValidator):
             except Exception as e:
                 logger.error(f"Error zeroing invalid miners: {str(e)}")
 
-        if not valid_uids:
+        if not valid_uids_to_score:
             return
 
         try:
@@ -213,10 +240,15 @@ class Validator(base.BaseValidator):
                 "/api/step",
                 json={
                     "scores": scores,
-                    "total_uids": valid_uids,
+                    "total_uids": valid_uids_to_score,
                 },
             )
-            self.scored_uids.extend(valid_uids)
+            pipe = self.redis.pipeline()
+            for uid in valid_uids_to_score:
+                key = f"scored_uid:{uid}"
+                pipe.incr(key)
+                pipe.expire(key, 360)
+            await pipe.execute()
         except Exception as e:
             logger.error(f"Error in scoring valid responses: {str(e)}")
 

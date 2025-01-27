@@ -28,7 +28,6 @@ class AutoSyncSubtensor:
         self.sync_executor = ThreadPoolExecutor(max_workers=1)
         self.set_weights_executor = ThreadPoolExecutor(max_workers=1)
         self.sync_executor.submit(self.sync_subtensor)
-
         self.router = APIRouter()
         self.router.add_api_route(
             "/api/set_weights", self.do_set_weights, methods=["POST"]
@@ -78,6 +77,8 @@ class AutoSyncSubtensor:
         logger.info(f"Setting weights for {self.uid}")
         logger.info(f"Current block: {current_block}")
         if current_block > last_update + CONFIG.subtensor_tempo:
+            logger.info(f"UIDs: {uint_uids}")
+            logger.info(f"Weights: {uint_weights}")
             try:
                 future = self.set_weights_executor.submit(
                     self.subtensor.set_weights,
@@ -89,6 +90,7 @@ class AutoSyncSubtensor:
                 success, msg = future.result(timeout=120)
                 if not success:
                     logger.error(f"Failed to set weights: {msg}")
+                    self.metagraph.sync()
                     return {"success": False, "message": msg}
                 else:
                     logger.info(f"Set weights result: {success}")
@@ -100,6 +102,7 @@ class AutoSyncSubtensor:
             logger.info(
                 f"Not setting weights because current block {current_block} is not greater than last update {last_update} + tempo {CONFIG.subtensor_tempo}"
             )
+            return {"success": False, "message": "Not setting weights"}
 
 
 if __name__ == "__main__":
