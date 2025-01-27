@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from cortext.protocol import ScoringRequest, ScoringResponse
+from cortext.protocol import ScoringRequest, ScoringResponse, ImagePrompt
 from cortext import CONFIG
 import uvicorn
 from loguru import logger
@@ -19,8 +19,12 @@ async def score(request: ScoringRequest) -> ScoringResponse:
 
     scores = []
     if model in ["dall-e-3"]:
+        prompt = request.request.messages[0]["content"]
+        prompt = ImagePrompt.from_string(prompt)
         for image_url in miner_completions:
-            score = dall_e_deterministic_score(image_url)
+            score = dall_e_deterministic_score(
+                image_url=image_url, prompt=prompt.prompt, size=prompt.size
+            )
             scores.append(score)
     elif model in ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet-20241022"]:
         payload["stream"] = False

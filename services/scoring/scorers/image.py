@@ -6,6 +6,11 @@ import json
 import os
 import urllib.request
 import tempfile
+from openai import AsyncOpenAI
+
+VISION_CLIENT = AsyncOpenAI(
+    api_key=os.getenv("TOGETHER_API_KEY"), base_url="https://api.together.xyz/v1"
+)
 
 
 def download_image(url, save_as):
@@ -41,7 +46,7 @@ def load_exif_from_url(image_url: str) -> dict:
     return metadata
 
 
-def dall_e_deterministic_score(image_url: str) -> int:
+async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> int:
     """Score an image based on its deterministic score.
 
     Validates if the URL matches the expected DALL-E API URL pattern.
@@ -66,10 +71,55 @@ def dall_e_deterministic_score(image_url: str) -> int:
     exif_data = load_exif_from_url(image_url)
 
     # Differentiate between DALL-E 2 and DALL-E 3
-    if "Claim_generator" in exif_data:
-        return 1
-    else:
+    if not "Claim_generator" in exif_data:
         return 0
+
+    scoring_prompt = f"""
+You are an AI tasked with evaluating the adherence of generated images to their corresponding prompt strings. Your job is to analyze how well the image matches the given prompt and assign a score from 0 to 10, where 0 indicates no adherence and 10 indicates perfect adherence.
+
+Please carefully examine the image and compare it to the prompt string. Consider the following aspects:
+1. How many elements from the prompt are present in the image?
+2. How accurately are these elements depicted?
+3. Does the overall composition and mood of the image match the prompt?
+4. Are there any significant elements in the image that were not mentioned in the prompt?
+
+Based on your analysis, determine a score from 0 to 10 that represents how well the image adheres to the prompt. Use this scale as a guide:
+0-2: Poor adherence, major discrepancies
+3-4: Below average adherence, significant mismatches
+5-6: Average adherence, some elements match but others are missing or inaccurate
+7-8: Good adherence, most elements match with minor discrepancies
+9-10: Excellent adherence, nearly perfect or perfect match
+
+Provide only the numerical score (0-10) inside <score> tags. Do not include any additional text with the score.
+
+Here is the prompt string used to generate the image:
+<prompt_string>
+{prompt}
+</prompt_string>
+"""
+    scoring_prompt = scoring_prompt.replace("{{PROMPT_STRING}}", prompt)
+    output = VISION_CLIENT.chat.completions.create(
+        model="meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": scoring_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_url,
+                        },
+                    },
+                ],
+            }
+        ],
+        stream=False,
+    )
+    completion = output.choices[0].message.content
+    logger.info(completion)
+    score = re.search(r"<score>(.*?)</score>", completion).group(1)
+    return int(score)
 
 
 if __name__ == "__main__":

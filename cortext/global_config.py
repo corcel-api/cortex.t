@@ -9,6 +9,7 @@ from .configs import (
     ValidatingConfig,
     WSubtensorConfig,
     OrganicConfig,
+    ModelConfig,
 )
 from loguru import logger
 from dotenv import load_dotenv
@@ -18,17 +19,75 @@ load_dotenv()
 
 
 class GlobalConfig(BaseSettings):
-    redis: RedisConfig = RedisConfig(host="localhost", port=6379)
-    bandwidth: BandwidthConfig = BandwidthConfig(host="localhost", port=8100)
-    score: ScoreConfig = ScoreConfig(host="localhost", port=8101)
+    redis: RedisConfig = RedisConfig(
+        host="localhost",
+        port=6379,
+        db=0,
+        organic_queue_key="organic_queue",
+        synthetic_queue_key="synthetic_queue",
+        miner_manager_key="node_manager",
+    )
+    bandwidth: BandwidthConfig = BandwidthConfig(
+        interval=60,
+        min_stake=10000,
+        model_configs={
+            "gpt-4o": ModelConfig(
+                credit=1,
+                model="gpt-4o",
+                max_tokens=8096,
+                synapse_type="streaming-chat",
+                timeout=12,
+                allowed_params=[
+                    "messages",
+                    "temperature",
+                    "max_tokens",
+                    "stream",
+                    "model",
+                    "seed",
+                ],
+            ),
+            "dall-e-3": ModelConfig(
+                credit=1,
+                model="dall-e-3",
+                timeout=32,
+                synapse_type="streaming-chat",
+                max_tokens=1024,
+                allowed_params=["prompt", "n", "size", "response_format", "user"],
+            ),
+            "claude-3-5-sonnet-20241022": ModelConfig(
+                credit=1,
+                model="claude-3-5-sonnet-20241022",
+                timeout=12,
+                synapse_type="streaming-chat",
+                max_tokens=8096,
+                allowed_params=[
+                    "messages",
+                    "temperature",
+                    "max_tokens",
+                    "stream",
+                    "model",
+                ],
+            ),
+        },
+        min_credit=128,
+        max_credit=1024,
+    )
+    score: ScoreConfig = ScoreConfig(host="localhost", port=8101, decay_factor=0.9)
     sql: SQLConfig = SQLConfig(url="sqlite:///miner_metadata.db")
     network: str = "mainnet"
-    synthesize: SynthesizeConfig = SynthesizeConfig(host="localhost", port=8102)
+    synthesize: SynthesizeConfig = SynthesizeConfig(
+        host="localhost",
+        port=8102,
+        synthetic_pool_size=1024,
+        organic_pool_size=1024,
+    )
     miner_manager: MinerManagerConfig = MinerManagerConfig(host="localhost", port=8103)
     validating: ValidatingConfig = ValidatingConfig(
         synthetic_threshold=0.2,
         synthetic_batch_size=4,
         synthetic_concurrent_batches=1,
+        min_credit=16,
+        max_credit=128,
     )
     w_subtensor: WSubtensorConfig = WSubtensorConfig(host="localhost", port=8104)
     organic: OrganicConfig = OrganicConfig(host="localhost", port=8105)
@@ -44,4 +103,5 @@ class GlobalConfig(BaseSettings):
 
 
 CONFIG = GlobalConfig()
-logger.info("\n" + json.dumps(CONFIG.model_dump(), indent=2))
+from rich import print as rprint
+rprint(CONFIG.model_dump())

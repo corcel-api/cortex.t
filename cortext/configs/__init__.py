@@ -1,5 +1,5 @@
 from .redis import RedisConfig
-from .bandwidth import BandwidthConfig
+from .bandwidth import BandwidthConfig, ModelConfig
 from .score import ScoreConfig
 from .sql import SQLConfig
 from .synthesize import SynthesizeConfig
@@ -18,4 +18,5 @@ __all__ = [
     "ValidatingConfig",
     "OrganicConfig",
     "WSubtensorConfig",
+    "ModelConfig",
 ]

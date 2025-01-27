@@ -7,12 +7,6 @@ from typing import AsyncIterator
 from loguru import logger
 
 
-async def mock_stream_response(chunk: str) -> AsyncIterator[str]:
-    # Yield the chunk with proper SSE format
-    yield f"data: {chunk}\n\n"
-    yield "data: [DONE]\n\n"
-
-
 async def forward(client: AsyncClient, payload: dict):
     model = payload["model"]
     if model in ["gpt-4o-mini", "gpt-4o"]:
@@ -23,26 +17,50 @@ async def forward(client: AsyncClient, payload: dict):
             timeout=60.0,
         )
     elif model in ["dall-e-3"]:
+        # Extract the prompt from the messages
         image_prompt = payload["messages"][0]["content"]
         image_prompt = ImagePrompt.from_string(image_prompt)
         logger.info(f"image_prompt: {image_prompt}")
-        response = await client.post(
-            "/images/generations",
-            json=image_prompt.model_dump(),
-            headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"},
-            timeout=60.0,
-        )
-        url = response.json()["data"][0]["url"]
-        chunk = mimic_chat_completion_chunk(url)
 
-        # Create a mock response object that implements aiter_lines
-        class MockResponse:
-            async def aiter_lines(self):
-                async for line in mock_stream_response(chunk.model_dump_json()):
-                    logger.info(f"Yielding line: {line} in Dall-E-3")
-                    yield line
+        # Prepare the DALL-E specific payload
+        dalle_payload = {
+            "model": "dall-e-3",
+            "prompt": image_prompt.prompt,
+            "n": 1,
+            "size": image_prompt.size or "1024x1024",  # Default size if not specified
+            "quality": image_prompt.quality
+            or "standard",  # Default quality if not specified
+            "style": image_prompt.style or "vivid",  # Default style if not specified
+        }
 
-        return MockResponse()
+        try:
+            future_response = client.post(
+                "/images/generations",
+                json=dalle_payload,
+                headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"},
+                timeout=60.0,
+            )
+
+            # Create a mock response object that implements aiter_lines
+            class MockResponse:
+                async def aiter_lines(self):
+                    response = await future_response
+                    if response.status_code != 200:
+                        logger.error(f"DALL-E API error: {response.text}")
+                        raise Exception(f"DALL-E API error: {response.text}")
+
+                    response_data = response.json()
+                    url = response_data["data"][0]["url"]
+                    chunk = mimic_chat_completion_chunk(url)
+                    logger.info(f"chunk: {chunk}")
+                    yield f"data: {chunk.model_dump_json()}"
+                    yield "data: [DONE]"
+
+            return MockResponse()
+
+        except Exception as e:
+            logger.error(f"Error in DALL-E processing: {str(e)}")
+            raise
     else:
         logger.error(f"Model {model} not supported in openai")
         return None

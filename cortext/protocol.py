@@ -6,6 +6,7 @@ from typing import Optional
 from .global_config import CONFIG
 import json
 import base64
+from loguru import logger
 
 
 class Credit(Synapse):
@@ -97,8 +98,8 @@ class ChatStreamingProtocol(StreamingSynapse):
                     self.streaming_chunks.append(chunk)
                     yield chunk
                 except Exception as e:
-                    print("Error", e)
-                    print("Failed chunk:", data)
+                    logger.error("Error", e)
+                    logger.error("Failed chunk:", data)
                     continue  # Continue instead of break to handle invalid chunks
 
     def extract_response_json(self, response: StreamingSynapse) -> dict:

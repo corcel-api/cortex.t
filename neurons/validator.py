@@ -97,6 +97,7 @@ class Validator(base.BaseValidator):
             logger.info(f"Received {len(responses)} responses")
             await self.score(uids, responses, synapse)
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Error in process_batch: {str(e)}")
 
     async def query_non_streaming(self, axons, synapse, model_config):
