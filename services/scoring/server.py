@@ -22,7 +22,7 @@ async def score(request: ScoringRequest) -> ScoringResponse:
         prompt = request.request.messages[0]["content"]
         prompt = ImagePrompt.from_string(prompt)
         for image_url in miner_completions:
-            score = dall_e_deterministic_score(
+            score = await dall_e_deterministic_score(
                 image_url=image_url, prompt=prompt.prompt, size=prompt.size
             )
             scores.append(score)

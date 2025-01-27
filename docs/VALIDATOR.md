@@ -6,6 +6,7 @@
 - CPU Virtual Machine
 - OpenAI API Key at https://platform.openai.com/
 - Together API Key at https://www.together.ai/
+- Claude API Key at https://www.anthropic.com/api
 
 ## Step-by-step setup
 
@@ -28,6 +29,7 @@ export WALLET_HOTKEY=default
 export AXON_PORT=8000
 export OPENAI_API_KEY=your_openai_api_key
 export TOGETHER_API_KEY=your_together_api_key
+export CLAUDE_API_KEY=your_claude_api_key
 ```
 
 To verify the exported variables:

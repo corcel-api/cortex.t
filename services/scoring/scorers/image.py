@@ -98,8 +98,8 @@ Here is the prompt string used to generate the image:
 </prompt_string>
 """
     scoring_prompt = scoring_prompt.replace("{{PROMPT_STRING}}", prompt)
-    output = VISION_CLIENT.chat.completions.create(
-        model="meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
+    output = await VISION_CLIENT.chat.completions.create(
+        model="Qwen/Qwen2-VL-72B-Instruct",
         messages=[
             {
                 "role": "user",
@@ -116,10 +116,11 @@ Here is the prompt string used to generate the image:
         ],
         stream=False,
     )
+    logger.info(output)
     completion = output.choices[0].message.content
     logger.info(completion)
     score = re.search(r"<score>(.*?)</score>", completion).group(1)
-    return int(score)
+    return float(score) / 10
 
 
 if __name__ == "__main__":

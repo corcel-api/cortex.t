@@ -98,9 +98,9 @@ class ChatStreamingProtocol(StreamingSynapse):
                     self.streaming_chunks.append(chunk)
                     yield chunk
                 except Exception as e:
-                    logger.error("Error", e)
-                    logger.error("Failed chunk:", data)
-                    continue  # Continue instead of break to handle invalid chunks
+                    logger.error(e)
+                    logger.error("Failed chunk:", line)
+                    continue
 
     def extract_response_json(self, response: StreamingSynapse) -> dict:
         # iterate over the response headers and extract the necessary data
