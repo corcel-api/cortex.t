@@ -10,12 +10,24 @@ from loguru import logger
 async def forward(client: AsyncClient, payload: dict):
     model = payload["model"]
     if model in ["gpt-4o-mini", "gpt-4o"]:
-        return await client.post(
-            "/chat/completions",
+        # Create a mock response object similar to the DALL-E implementation
+        class MockResponse:
+            def __init__(self, stream_response):
+                self.stream_response = stream_response
+
+            async def aiter_lines(self):
+                async with self.stream_response as response:
+                    async for line in response.aiter_lines():
+                        yield line
+
+        stream_response = client.stream(
+            method="post",
+            url="/chat/completions",
             json=payload,
             headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"},
             timeout=60.0,
         )
+        return MockResponse(stream_response)
     elif model in ["dall-e-3"]:
         # Extract the prompt from the messages
         image_prompt = payload["messages"][0]["content"]

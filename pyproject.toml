@@ -10,7 +10,7 @@ dependencies = [
     "numpy",
     "opencv-python",
     "loguru",
-    "bittensor==8.5.1",
+    "bittensor==8.5.2",
     "redis",
     "sqlalchemy",
     "pandas",
@@ -21,6 +21,7 @@ dependencies = [
     "anthropic>=0.44.0",
     "pillow>=11.1.0",
     "datasets",
+    "streamlit==1.41.1",
 ]
 
 
@@ -30,3 +31,5 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
+[tool.uv]
+override-dependencies = ["toml==0.10.0"]

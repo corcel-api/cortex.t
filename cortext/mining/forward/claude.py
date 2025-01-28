@@ -14,34 +14,35 @@ class MockOpenAICompatibleResponse:
         self.model = model
 
     async def aiter_lines(self):
-        for chunk in self.response.iter_text():
-            logger.info(f"Received chunk: {chunk}")
-            if not chunk:
-                continue
-
-            for line in chunk.splitlines():
-                if not line.strip() or not line.startswith("data: "):
+        async with self.response as response:
+            async for line in response.aiter_lines():
+                logger.info(f"Received chunk: {line}")
+                if not line:
                     continue
 
-                try:
-                    line_data = line.split("data: ")[1]
-                    data = json.loads(line_data)
-
-                    if data["type"] == "message_start":
-                        self.id = data["message"]["id"]
-                        self.model = data["message"]["model"]
+                for line in line.splitlines():
+                    if not line.strip() or not line.startswith("data: "):
                         continue
 
-                    if data["type"] == "content_block_delta":
-                        delta_text = data["delta"]["text"]
-                        openai_data = mimic_chat_completion_chunk(
-                            delta_text, id=self.id, model=self.model
-                        )
-                        yield f"data: {openai_data.model_dump_json()}\n\n"
+                    try:
+                        line_data = line.split("data: ")[1]
+                        data = json.loads(line_data)
 
-                except Exception as e:
-                    logger.error(f"Error processing line: {str(e)}")
-                    continue
+                        if data["type"] == "message_start":
+                            self.id = data["message"]["id"]
+                            self.model = data["message"]["model"]
+                            continue
+
+                        if data["type"] == "content_block_delta":
+                            delta_text = data["delta"]["text"]
+                            openai_data = mimic_chat_completion_chunk(
+                                delta_text, id=self.id, model=self.model
+                            )
+                            yield f"data: {openai_data.model_dump_json()}\n\n"
+
+                    except Exception as e:
+                        logger.error(f"Error processing line: {str(e)}")
+                        continue
 
 
 async def forward(client: AsyncClient, payload: dict):
@@ -56,8 +57,9 @@ async def forward(client: AsyncClient, payload: dict):
 
     logger.info(f"Payload: {valid_payload}")
 
-    response = await client.post(
-        "/messages",
+    stream_context = client.stream(
+        method="post",
+        url="/messages",
         json=valid_payload,
         headers={
             "x-api-key": f"{os.getenv('ANTHROPIC_API_KEY')}",
@@ -66,4 +68,4 @@ async def forward(client: AsyncClient, payload: dict):
         timeout=60.0,
     )
 
-    return MockOpenAICompatibleResponse(response)
+    return MockOpenAICompatibleResponse(stream_context)
