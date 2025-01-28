@@ -4,16 +4,20 @@ import json
 from datetime import datetime
 import pandas as pd
 from cortext import CONFIG
+from openai import OpenAI
 
 # Configuration
 API_BASE_URL = f"http://{CONFIG.organic.host}:{CONFIG.organic.port}"
+
+OPENAI_CLIENT = OpenAI(api_key="", base_url=API_BASE_URL + "/api/v1")
 
 
 def check_admin_key(admin_key):
     """Validate admin key by trying to fetch all API keys"""
     try:
         response = requests.get(
-            f"{API_BASE_URL}/api/v1/keys", headers={"X-API-Key": admin_key}
+            f"{API_BASE_URL}/api/v1/keys",
+            headers={"Authorization": f"Bearer {admin_key}"},
         )
         return response.status_code == 200
     except:
@@ -79,32 +83,14 @@ else:
                 }
 
                 with st.spinner("Waiting for response..."):
-                    response = requests.post(
-                        f"{API_BASE_URL}/api/v1/chat/completions",
-                        json=payload,
-                        headers={"X-API-Key": api_key},
-                        stream=True,
-                        timeout=64,
-                    )
+                    OPENAI_CLIENT.api_key = api_key
+                    response = OPENAI_CLIENT.chat.completions.create(**payload)
 
                     response_container = st.empty()
 
                     def stream_data():
-                        for line in response.iter_lines():
-                            if line:
-                                line = line.decode("utf-8")
-                                if line.startswith("data: "):
-                                    data = line[6:]
-                                    if data != "[DONE]":
-                                        try:
-                                            chunk = json.loads(data)
-                                            print(chunk)
-                                            delta = chunk["choices"][0]["delta"][
-                                                "content"
-                                            ]
-                                            yield delta
-                                        except:
-                                            continue
+                        for chunk in response:
+                            yield chunk.choices[0].delta.content
 
                     st.write_stream(stream_data)
 
@@ -135,7 +121,9 @@ else:
                             "initial_credits": initial_credits,
                             "monthly_reset": monthly_reset,
                         },
-                        headers={"X-API-Key": st.session_state.admin_key},
+                        headers={
+                            "Authorization": f"Bearer {st.session_state.admin_key}"
+                        },
                     )
                     if response.status_code == 200:
                         st.success("API Key created successfully!")
@@ -151,7 +139,7 @@ else:
             try:
                 response = requests.get(
                     f"{API_BASE_URL}/api/v1/keys",
-                    headers={"X-API-Key": st.session_state.admin_key},
+                    headers={"Authorization": f"Bearer {st.session_state.admin_key}"},
                 )
                 if response.status_code == 200:
                     keys_data = response.json()
@@ -181,7 +169,7 @@ else:
                                         f"{API_BASE_URL}/api/v1/keys/{key['key']}/add-credits",
                                         params={"amount": new_credits},
                                         headers={
-                                            "X-API-Key": st.session_state.admin_key
+                                            "Authorization": f"Bearer {st.session_state.admin_key}"
                                         },
                                     )
                                     if response.status_code == 200:
@@ -200,7 +188,7 @@ else:
                                         f"{API_BASE_URL}/api/v1/keys/{key['key']}/status",
                                         json={"is_active": new_status},
                                         headers={
-                                            "X-API-Key": st.session_state.admin_key
+                                            "Authorization": f"Bearer {st.session_state.admin_key}"
                                         },
                                     )
                                     if response.status_code == 200:
@@ -212,7 +200,7 @@ else:
                                         response = requests.delete(
                                             f"{API_BASE_URL}/api/v1/keys/{key['key']}",
                                             headers={
-                                                "X-API-Key": st.session_state.admin_key
+                                                "Authorization": f"Bearer {st.session_state.admin_key}"
                                             },
                                         )
                                         if response.status_code == 200:

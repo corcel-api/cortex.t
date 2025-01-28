@@ -6,7 +6,7 @@ from decimal import Decimal
 
 load_dotenv()
 from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.security import APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from cortext import CONFIG, protocol
 from fastapi.responses import StreamingResponse
 import httpx
@@ -19,8 +19,8 @@ import os
 from dateutil.relativedelta import relativedelta
 import traceback
 
-# API key header
-api_key_header = APIKeyHeader(name="X-API-Key")
+# Replace api_key_header with security scheme
+security = HTTPBearer()
 
 # Get admin API key from environment variable with fallback to test key
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "test-key")
@@ -99,8 +99,11 @@ async def update_credit_usage(redis_client: Redis, api_key: str, credits_used: D
 
 
 async def verify_api_key(
-    api_key: str = Depends(api_key_header), redis: Redis = Depends(lambda: redis_client)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    redis: Redis = Depends(lambda: redis_client),
 ):
+    logger.info(credentials)
+    api_key = credentials.credentials  # Extract token from Bearer credentials
     key_data = await get_api_key(redis, api_key)
 
     logger.info(f"Key data: {key_data}")
@@ -109,7 +112,7 @@ async def verify_api_key(
         raise HTTPException(
             status_code=401,
             detail="Invalid or inactive API key",
-            headers={"WWW-Authenticate": "APIKey"},
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     if "chat" not in key_data.permissions:
@@ -137,7 +140,6 @@ async def verify_api_key(
     return key_data
 
 
-@app.post("/api/v1/chat/completions")
 async def chat_completions(
     request: protocol.MinerPayload, api_key: APIKey = Depends(verify_api_key)
 ):
@@ -216,6 +218,11 @@ async def chat_completions(
         return {"error": {"message": str(e), "type": "request_error"}}
 
 
+app.add_api_route(
+    "/api/v1/chat/completions", chat_completions, methods=["POST", "OPTIONS"]
+)
+
+
 # Utility functions
 def calculate_next_reset_date(current_reset_date: datetime) -> datetime:
     """Calculate the next reset date based on your billing cycle logic"""
@@ -228,10 +235,10 @@ async def create_key(
     user_id: str,
     initial_credits: float = 100.0,
     monthly_reset: bool = True,
-    api_key: str = Depends(api_key_header),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    # Verify admin access
-    if api_key != ADMIN_API_KEY:
+    # Verify admin access using Bearer token
+    if credentials.credentials != ADMIN_API_KEY:
         raise HTTPException(
             status_code=403, detail="Admin API key required for this operation"
         )
@@ -252,9 +259,12 @@ async def create_key(
 
 
 @app.post("/api/v1/keys/{key}/add-credits")
-async def add_credits(key: str, amount: float, api_key: str = Depends(api_key_header)):
-    # Verify admin access
-    if api_key != ADMIN_API_KEY:
+async def add_credits(
+    key: str,
+    amount: float,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    if credentials.credentials != ADMIN_API_KEY:
         raise HTTPException(
             status_code=403, detail="Admin API key required for this operation"
         )
@@ -269,9 +279,9 @@ async def add_credits(key: str, amount: float, api_key: str = Depends(api_key_he
 
 
 @app.get("/api/v1/keys", response_model=list[APIKey])
-async def get_all_keys(api_key: str = Depends(api_key_header)):
-    # Verify admin access
-    if api_key != ADMIN_API_KEY:
+async def get_all_keys(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    # Verify admin access using Bearer token
+    if credentials.credentials != ADMIN_API_KEY:
         raise HTTPException(
             status_code=403, detail="Admin API key required for this operation"
         )
@@ -289,9 +299,9 @@ async def get_all_keys(api_key: str = Depends(api_key_header)):
 async def update_key_status(
     key: str,
     status_update: dict,
-    api_key: str = Depends(api_key_header),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    if api_key != ADMIN_API_KEY:
+    if credentials.credentials != ADMIN_API_KEY:
         raise HTTPException(
             status_code=403, detail="Admin API key required for this operation"
         )
@@ -308,9 +318,9 @@ async def update_key_status(
 @app.delete("/api/v1/keys/{key}")
 async def delete_key(
     key: str,
-    api_key: str = Depends(api_key_header),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    if api_key != ADMIN_API_KEY:
+    if credentials.credentials != ADMIN_API_KEY:
         raise HTTPException(
             status_code=403, detail="Admin API key required for this operation"
         )
@@ -320,11 +330,6 @@ async def delete_key(
         raise HTTPException(status_code=404, detail="API key not found")
 
     return {"status": "success"}
-
-
-@app.get("/")
-async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
 
 
 if __name__ == "__main__":
