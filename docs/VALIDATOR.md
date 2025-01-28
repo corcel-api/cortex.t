@@ -55,6 +55,53 @@ You can modify the default ports by setting the corresponding environment variab
 pm2 start python --name "cortex_validating" -- -m neurons.validator
 ```
 
+## Organic Serving
+1. Set admin api key
+```
+export ADMIN_API_KEY=your_admin_api_key
+```
+2. Run organic proxy server
+
+By default, the organic proxy server is set to listen on port `localhost:8105`.
+You can modify the port by setting the `ORGANIC__PORT` environment variable.
+
+```
+pm2 start python --name "cortex_organic" -- -m services.organic.server
+```
+3. Optional: Run organic frontend for managing API keys and Test generation
+```
+pm2 start python --name "cortex_organic_frontend" -- -m services.organic.frontend
+```
+
+| Endpoint | Method | Description | Request Parameters | Authentication | Response |
+|----------|---------|-------------|-------------------|----------------|-----------|
+| `/api/v1/chat/completions` | POST | Process chat completion requests | `request`: MinerPayload object | API Key required | Streaming response of chat completion chunks |
+| `/api/v1/keys` | POST | Create new API key | `user_id`: string<br>`initial_credits`: float (default: 100.0)<br>`monthly_reset`: boolean (default: true) | Admin API Key required | New APIKey object |
+| `/api/v1/keys` | GET | Retrieve all API keys | None | Admin API Key required | List of APIKey objects |
+| `/api/v1/keys/{key}/add-credits` | POST | Add credits to existing API key | `key`: string (path)<br>`amount`: float | Admin API Key required | Updated APIKey object |
+| `/api/v1/keys/{key}/status` | PATCH | Update API key status | `key`: string (path)<br>`status_update`: dict with `is_active` boolean | Admin API Key required | Updated APIKey object |
+| `/api/v1/keys/{key}` | DELETE | Delete an API key | `key`: string (path) | Admin API Key required | Success message |
+
+**APIKey Object Structure:**
+```python
+{
+    "key": string,
+    "user_id": string,
+    "created_at": datetime,
+    "is_active": boolean,
+    "permissions": list[string],
+    "total_credits": decimal,
+    "used_credits": decimal,
+    "credit_reset_date": datetime (optional)
+}
+```
+
+**Notes:**
+- All endpoints require authentication via the `X-API-Key` header
+- Admin operations require the admin API key (set via `ADMIN_API_KEY` environment variable)
+- The chat completions endpoint consumes credits based on the model configuration
+- Credits can be set to reset monthly if specified during key creation
+
 
 ### Default Config
 ```
