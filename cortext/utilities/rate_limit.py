@@ -1,4 +1,3 @@
-import pandas as pd
 from ..global_config import CONFIG
 
 

@@ -4,9 +4,10 @@ from typing import List
 from fastapi.responses import StreamingResponse
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
+
 # Definitions
 class MinerPayload(BaseModel):
-    model: str = "gpt-4o-mini"
+    model: str = ""
     messages: List[dict] = []
     temperature: float = 0.0
     max_tokens: int = 4096
@@ -14,14 +15,18 @@ class MinerPayload(BaseModel):
     frequency_penalty: float = 0.0
     stream: bool = True
 
+
 class MinerResponse(ChatCompletionChunk):
     pass
+
 
 class ScoringResponse(BaseModel):
     score: float = 0.0
 
+
 # FastAPI Server
 app = FastAPI()
+
 
 @app.post("/chat-stream")
 async def chat_stream(payload: MinerPayload):
@@ -40,6 +45,7 @@ async def chat_stream(payload: MinerPayload):
         return StreamingResponse(stream_response(), media_type="text/event-stream")
     else:
         return MinerResponse(choices=[{"delta": {"content": "Simulated response"}}])
+
 
 @app.post("/score")
 async def score_response():

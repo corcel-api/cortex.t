@@ -11,9 +11,8 @@ from .configs import (
     OrganicConfig,
     ModelConfig,
 )
-from loguru import logger
+from rich import print as rprint
 from dotenv import load_dotenv
-import json
 
 load_dotenv()
 
@@ -103,6 +102,5 @@ class GlobalConfig(BaseSettings):
 
 
 CONFIG = GlobalConfig()
-from rich import print as rprint
 
 rprint(CONFIG.model_dump())

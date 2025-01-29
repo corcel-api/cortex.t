@@ -1,5 +1,4 @@
 import re
-import requests
 from loguru import logger
 import subprocess
 import json
@@ -71,7 +70,7 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     exif_data = load_exif_from_url(image_url)
 
     # Differentiate between DALL-E 2 and DALL-E 3
-    if not "Claim_generator" in exif_data:
+    if "Claim_generator" not in exif_data:
         return 0
 
     scoring_prompt = f"""
@@ -127,5 +126,5 @@ if __name__ == "__main__":
     url = "https://oaidalleapiprodscus.blob.core.windows.net/private/org-D1M4iKyWTgllT9IRx1f0IZ1o/user-eKhw8tXOQNWX5bhjzwGqKJRb/img-YzvOGexdbWo6EvbDOCUMrPxL.png?st=2025-01-24T07%3A18%3A09Z&se=2025-01-24T09%3A18%3A09Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-01-24T00%3A22%3A14Z&ske=2025-01-25T00%3A22%3A14Z&sks=b&skv=2024-08-04&sig=0IwWSzv2YitT7P6%2BgfosJzlZzzwTFxOqwNHbMWk5xeo%3D"
     # url = "https://oaidalleapiprodscus.blob.core.windows.net/private/org-D1M4iKyWTgllT9IRx1f0IZ1o/user-eKhw8tXOQNWX5bhjzwGqKJRb/img-jdeefxfcK4yPlnxmcjmAFsyw.png?st=2025-01-24T07%3A26%3A45Z&se=2025-01-24T09%3A26%3A45Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=d505667d-d6c1-4a0a-bac7-5c84a87759f8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-01-24T00%3A39%3A57Z&ske=2025-01-25T00%3A39%3A57Z&sks=b&skv=2024-08-04&sig=O3Hb7wd4FWsSFBPiQ9u5k6BzYvk/0AMlB04xtDwWNS4%3D"
 
-    score = image_deterministic_score(url)
+    score = dall_e_deterministic_score(url, "a cat", "1024x1024")
     print(score)

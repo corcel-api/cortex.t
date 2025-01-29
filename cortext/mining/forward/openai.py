@@ -1,9 +1,6 @@
 from httpx import AsyncClient
 import os
 from ...protocol import ImagePrompt, mimic_chat_completion_chunk
-import json
-import asyncio
-from typing import AsyncIterator
 from loguru import logger
 
 

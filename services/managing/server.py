@@ -1,10 +1,6 @@
-from dotenv import load_dotenv
-
-load_dotenv()
 from cortext.validating.managing.miner_manager import MinerManager
 from cortext import CONFIG
 from fastapi import FastAPI
-import os
 from loguru import logger
 import uvicorn
 from pydantic import BaseModel
@@ -58,7 +54,7 @@ async def step(request: StepRequest):
 
 @app.get("/api/weights")
 async def weights():
-    logger.info(f"Getting weights")
+    logger.info("Getting weights")
     uids, weights = miner_manager.weights
     return WeightsResponse(weights=weights, uids=uids)
 

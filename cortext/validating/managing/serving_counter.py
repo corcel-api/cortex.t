@@ -4,7 +4,6 @@ from loguru import logger
 
 
 class ServingCounter:
-
     def __init__(
         self,
         quota: int,

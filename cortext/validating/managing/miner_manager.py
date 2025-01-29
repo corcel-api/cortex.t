@@ -2,10 +2,8 @@ import redis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from loguru import logger
-from sqlalchemy.ext.declarative import declarative_base
 import numpy as np
 import bittensor as bt
-import random
 from .sql_schemas import Base, MinerMetadata
 from .serving_counter import ServingCounter
 from ...global_config import CONFIG

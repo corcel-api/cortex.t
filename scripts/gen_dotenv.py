@@ -1,6 +1,3 @@
-import os
-
-
 def get_user_input(prompt, default=None):
     if default:
         value = input(f"{prompt} (default: {default}): ").strip()

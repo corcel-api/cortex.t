@@ -3,7 +3,6 @@ from cortext.configs.bandwidth import ModelConfig
 from cortext.protocol import MinerPayload
 from cortext import CONFIG
 import bittensor as bt
-import random
 import uvicorn
 from redis.asyncio import Redis
 import json

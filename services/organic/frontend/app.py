@@ -1,10 +1,9 @@
 import streamlit as st
 import requests
-import json
-from datetime import datetime
 import pandas as pd
 from cortext import CONFIG
 from openai import OpenAI
+from loguru import logger
 
 # Configuration
 API_BASE_URL = f"http://{CONFIG.organic.host}:{CONFIG.organic.port}"
@@ -20,7 +19,8 @@ def check_admin_key(admin_key):
             headers={"Authorization": f"Bearer {admin_key}"},
         )
         return response.status_code == 200
-    except:
+    except Exception as e:
+        logger.error(f"Error checking admin key: {e}")
         return False
 
 

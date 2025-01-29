@@ -1,7 +1,5 @@
 import bittensor as bt
 from abc import ABC, abstractmethod
-import threading
-from loguru import logger
 import argparse
 import os
 from .config import add_common_config

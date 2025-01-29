@@ -1,12 +1,10 @@
 from cortext import CONFIG, base, protocol
 from cortext.configs.bandwidth import ModelConfig
 import bittensor as bt
-import random
 import httpx
 import asyncio
 from loguru import logger
 import traceback
-import pandas as pd
 import time
 import numpy as np
 from redis.asyncio import Redis

@@ -1,12 +1,9 @@
-from dotenv import load_dotenv
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 from decimal import Decimal
-
-load_dotenv()
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from cortext import CONFIG, protocol
 from fastapi.responses import StreamingResponse
 import httpx

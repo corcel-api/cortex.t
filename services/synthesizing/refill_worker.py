@@ -1,18 +1,11 @@
-from dotenv import load_dotenv
-
-load_dotenv()
-
-import bittensor as bt
 from loguru import logger
 from cortext import CONFIG
 from redis import Redis
-import json
 import time
 from tqdm import tqdm
 from datasets import load_dataset
 import random
 from cortext.protocol import MinerPayload, ImagePrompt
-import random
 
 ds = load_dataset(
     "HuggingFaceFW/fineweb-edu", "sample-100BT", streaming=True, split="train"

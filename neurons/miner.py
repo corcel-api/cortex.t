@@ -2,13 +2,10 @@ from cortext import base, protocol, CONFIG, mining
 from cortext.utilities.rate_limit import get_rate_limit_proportion
 from cortext.validating.managing import ServingCounter
 import bittensor as bt
-import random
 from typing import Tuple
-import asyncio
 import time
 import httpx
 from loguru import logger
-import os
 import redis
 import traceback
 

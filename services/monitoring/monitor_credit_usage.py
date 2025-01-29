@@ -2,7 +2,6 @@ from blessed import Terminal
 import redis
 import time
 from cortext import CONFIG
-import math
 
 
 def get_bar(percentage, width=50):
@@ -77,7 +76,7 @@ def monitor_serving_counters():
             # Print footer
             print("=" * term.width)
             print(f"Total miners: {len(counter_data)}")
-            print(f"Press Ctrl+C to exit")
+            print("Press Ctrl+C to exit")
 
             time.sleep(1)
 

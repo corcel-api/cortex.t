@@ -1,6 +1,5 @@
 from cortext import protocol
 from neurons.validator import Validator
-import bittensor as bt
 import asyncio
 
 
@@ -13,7 +12,6 @@ class DumpValidator(Validator):
 
 
 async def main():
-
     validator = DumpValidator()
     validator.miner_manager.step(
         [1, 0, 1],

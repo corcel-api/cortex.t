@@ -1,5 +1,4 @@
-from pydantic import BaseModel, Field
-import os
+from pydantic import BaseModel
 
 
 class RedisConfig(BaseModel):

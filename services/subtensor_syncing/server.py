@@ -1,9 +1,4 @@
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import bittensor as bt
-import os
 from loguru import logger
 from concurrent.futures import ThreadPoolExecutor
 import time

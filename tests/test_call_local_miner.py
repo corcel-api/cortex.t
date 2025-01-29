@@ -1,6 +1,5 @@
 from cortext import protocol
 from cortext.base import BaseValidator
-import bittensor as bt
 import asyncio
 
 
@@ -16,7 +15,6 @@ class DumpValidator(BaseValidator):
 
 
 async def main():
-
     validator = DumpValidator()
 
     target_axon = validator.metagraph.axons[1]
@@ -40,7 +38,6 @@ async def main():
 
     print(synapse)
 
-    
     response = await validator.dendrite.forward(
         axons=[target_axon],
         synapse=synapse,
