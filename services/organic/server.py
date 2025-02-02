@@ -15,6 +15,7 @@ import secrets
 import os
 from dateutil.relativedelta import relativedelta
 import traceback
+from fastapi.middleware.cors import CORSMiddleware
 
 # Replace api_key_header with security scheme
 security = HTTPBearer()
@@ -36,6 +37,15 @@ subtensor_client = httpx.AsyncClient(
 )
 dendrite = bt.Dendrite(wallet=wallet)
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust this to your needs
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods, including OPTIONS
+    allow_headers=["*"],  # Allow all headers
+)
 
 
 class APIKey(BaseModel):
@@ -242,7 +252,7 @@ async def create_key(
 
     reset_date = datetime.utcnow() + relativedelta(months=1) if monthly_reset else None
     api_key = APIKey(
-        key=secrets.token_urlsafe(32),
+        key=f"sk-{secrets.token_urlsafe(48)}",
         user_id=user_id,
         created_at=datetime.utcnow(),
         is_active=True,

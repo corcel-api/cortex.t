@@ -19,6 +19,11 @@ class Credit(Synapse):
 
 class MinerPayload(BaseModel):
     model: str = Field(description="The model to be used for the miner", default="")
+
+    @validator("model")
+    def remove_cursor_prefix(cls, v):
+        return v.replace("clau-de", "claude")
+
     messages: list[dict] = Field(
         description="The messages to be sent to the miner", default=[]
     )

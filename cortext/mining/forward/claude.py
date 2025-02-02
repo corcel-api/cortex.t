@@ -55,6 +55,11 @@ async def forward(client: AsyncClient, payload: dict):
     allowed_params = CONFIG.bandwidth.model_configs[model].allowed_params
     valid_payload = {k: v for k, v in payload.items() if k in allowed_params}
 
+    if valid_payload["messages"][0]["role"] == "system":
+        system_message = valid_payload["messages"][0]["content"]
+        valid_payload["messages"] = valid_payload["messages"][1:]
+        valid_payload["system"] = system_message
+
     logger.info(f"Payload: {valid_payload}")
 
     stream_context = client.stream(
