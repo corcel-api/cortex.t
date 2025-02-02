@@ -8,6 +8,15 @@ import traceback
 from fastapi import FastAPI, APIRouter
 import uvicorn
 import numpy as np
+from cortext.utilities.rate_limit import get_rate_limit_proportion
+from .data_types import (
+    UIDsResponse,
+    AxonsRequest,
+    AxonsResponse,
+    RateLimitRequest,
+    RateLimitResponse,
+    SetWeightsResponse,
+)
 
 
 class AutoSyncSubtensor:
@@ -28,6 +37,12 @@ class AutoSyncSubtensor:
             "/api/set_weights", self.do_set_weights, methods=["POST"]
         )
         self.router.add_api_route("/api/axons", self.get_axons, methods=["POST"])
+        self.router.add_api_route("/api/uids", self.get_uids, methods=["POST"])
+        self.router.add_api_route(
+            "/api/rate_limit_percentage",
+            self.get_rate_limit_percentage,
+            methods=["POST"],
+        )
 
         self.app = FastAPI()
         self.app.include_router(self.router)
@@ -38,18 +53,28 @@ class AutoSyncSubtensor:
             self.metagraph.sync()
             time.sleep(600)
 
-    def get_axons(self, uids: list[int]) -> list[str]:
-        axons: list[bt.AxonInfo] = [self.metagraph.axons[uid] for uid in uids]
-        return [axon.to_string() for axon in axons]
+    def get_uids(self) -> UIDsResponse:
+        return UIDsResponse(uids=self.metagraph.uids.tolist())
 
-    async def do_set_weights(self):
+    def get_axons(self, request: AxonsRequest) -> AxonsResponse:
+        axons: list[bt.AxonInfo] = [self.metagraph.axons[uid] for uid in request.uids]
+        return AxonsResponse(axons=[axon.to_string() for axon in axons])
+
+    def get_rate_limit_percentage(self, request: RateLimitRequest) -> RateLimitResponse:
+        return RateLimitResponse(
+            rate_limit_percentage=get_rate_limit_proportion(self.metagraph, request.uid)
+        )
+
+    async def do_set_weights(self) -> SetWeightsResponse:
         logger.info("Setting weights")
         current_block = self.subtensor.get_current_block()
         last_update = self.metagraph.last_update[self.uid]
         logger.info(f"Current block: {current_block}")
         logger.info(f"Last update: {last_update}")
         logger.info("Getting weights from miner manager")
-        response = await self.miner_manager_client.get("/api/weights")
+        response = await self.miner_manager_client.post(
+            "/api/weights", timeout=120, json={"uid": self.uid}
+        )
         response_json = response.json()
         weights = response_json["weights"]
         uids = response_json["uids"]
@@ -86,10 +111,10 @@ class AutoSyncSubtensor:
                 if not success:
                     logger.error(f"Failed to set weights: {msg}")
                     self.metagraph.sync()
-                    return {"success": False, "message": msg}
+                    return SetWeightsResponse(success=False, message=msg)
                 else:
                     logger.info(f"Set weights result: {success}")
-                    return {"success": True, "message": msg}
+                    return SetWeightsResponse(success=True, message=msg)
             except Exception as e:
                 logger.error(f"Failed to set weights: {e}")
                 traceback.print_exc()
@@ -97,7 +122,7 @@ class AutoSyncSubtensor:
             logger.info(
                 f"Not setting weights because current block {current_block} is not greater than last update {last_update} + tempo {CONFIG.subtensor_tempo}"
             )
-            return {"success": False, "message": "Not setting weights"}
+            return SetWeightsResponse(success=False, message="Not setting weights")
 
 
 if __name__ == "__main__":

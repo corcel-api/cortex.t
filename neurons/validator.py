@@ -97,7 +97,9 @@ class Validator(base.BaseValidator):
 
     async def process_batch(self, uids, synapse, model_config):
         try:
-            axons_data = await self.w_subtensor_client.post("/api/axons", json=uids)
+            axons_data = await self.w_subtensor_client.get(
+                "/api/axons", timeout=4, params={"uids": uids}
+            )
             axons_data: list[str] = axons_data.json()
             axons = [bt.AxonInfo.from_string(axon_data) for axon_data in axons_data]
             responses = await self.query_non_streaming(axons, synapse, model_config)

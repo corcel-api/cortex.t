@@ -68,7 +68,7 @@ class GlobalConfig(BaseSettings):
                 ],
             ),
         },
-        min_credit=32,
+        min_credit=16,
         max_credit=256,
     )
     score: ScoreConfig = ScoreConfig(host="localhost", port=8101, decay_factor=0.9)
@@ -85,8 +85,6 @@ class GlobalConfig(BaseSettings):
         synthetic_threshold=0.2,
         synthetic_batch_size=4,
         synthetic_concurrent_batches=1,
-        min_credit=16,
-        max_credit=128,
     )
     w_subtensor: WSubtensorConfig = WSubtensorConfig(host="localhost", port=8104)
     organic: OrganicConfig = OrganicConfig(host="localhost", port=8105)

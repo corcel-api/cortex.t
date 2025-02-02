@@ -7,9 +7,10 @@ import bittensor as bt
 from .sql_schemas import Base, MinerMetadata
 from .serving_counter import ServingCounter
 from ...global_config import CONFIG
-from ...utilities.rate_limit import get_rate_limit_proportion
 from ...protocol import Credit
 import asyncio
+import httpx
+import traceback
 
 
 class MinerManager:
@@ -17,6 +18,9 @@ class MinerManager:
         self.subtensor = bt.subtensor(network=network)
         self.metagraph = self.subtensor.metagraph(netuid=netuid)
         self.wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
+        self.subtensor_client = httpx.AsyncClient(
+            base_url=f"http://{CONFIG.w_subtensor.host}:{CONFIG.w_subtensor.port}",
+        )
         self.uid = 0
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         logger.info(f"Connecting to Redis at {CONFIG.redis.host}:{CONFIG.redis.port}")
@@ -37,10 +41,15 @@ class MinerManager:
         logger.success("MinerManager initialization complete")
 
     async def sync_credit(self):
-        uids = self.metagraph.uids.tolist()
-        axons = self.metagraph.axons
+        uids_request = await self.subtensor_client.post("/api/uids", timeout=4, json={})
+        uids = uids_request.json()["uids"]
+        axons_request = await self.subtensor_client.post(
+            "/api/axons", timeout=4, json={"uids": uids}
+        )
+        axons = axons_request.json()["axons"]
+        axons = [bt.AxonInfo.from_string(axon) for axon in axons]
         responses = await self.dendrite.forward(
-            axons=axons, synapse=Credit(), timeout=16
+            axons=axons, synapse=Credit(), timeout=4
         )
         metadata = self.query(uids)
         credits = []
@@ -59,13 +68,21 @@ class MinerManager:
     async def _sync_serving_counter_loop(self):
         try:
             logger.info("Syncing serving counter loop")
-            uids = self.metagraph.uids.tolist()
+            uids_request = await self.subtensor_client.post(
+                "/api/uids", timeout=4, json={}
+            )
+            uids = uids_request.json()["uids"]
             await self.sync_credit()
             metadata = self.query(uids)
-            percentage_rate_limit = get_rate_limit_proportion(self.metagraph, self.uid)
+            percentage_rate_limit_request = await self.subtensor_client.post(
+                "/api/rate_limit_percentage",
+                timeout=4,
+                json={"uid": self.uid},
+            )
+            percentage_rate_limit = percentage_rate_limit_request.json()[
+                "rate_limit_percentage"
+            ]
             logger.info(f"Percentage rate limit: {percentage_rate_limit}")
-            if CONFIG.subtensor_network == "test":
-                percentage_rate_limit = 1
             logger.info(f"Creating serving counters for {len(uids)} UIDs")
             self.serving_counters = {
                 uid: ServingCounter(
@@ -79,6 +96,7 @@ class MinerManager:
                 f"Serving counters initialized with rate limit: {self.serving_counters}"
             )
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"Error in sync serving counter loop: {e}")
             await asyncio.sleep(600)
 
