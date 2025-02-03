@@ -68,7 +68,7 @@ class GlobalConfig(BaseSettings):
                 ],
             ),
         },
-        min_credit=16,
+        min_credit=48,
         max_credit=256,
     )
     score: ScoreConfig = ScoreConfig(host="localhost", port=8101, decay_factor=0.9)

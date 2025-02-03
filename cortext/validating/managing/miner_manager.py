@@ -122,24 +122,62 @@ class MinerManager:
         return result
 
     def consume(self, threshold: float, k: int, task_credit: int):
-        logger.info(f"Consuming {task_credit} credit for {k} miners")
-        logger.info(f"Credits: {self.credits}")
-        total_credit = sum(self.credits)
-        if total_credit == 0:
+        logger.info(
+            f"Starting credit consumption process: {task_credit} credit for {k} miners"
+        )
+
+        # Get remaining quotas atomically using pipeline
+        logger.debug("Initializing Redis pipeline to fetch remaining quotas.")
+        pipe = self.redis_client.pipeline()
+        for uid in self.uids:
+            logger.debug(f"Fetching quota for UID {uid}.")
+            pipe.get(self.serving_counters[uid].key)
+            pipe.get(self.serving_counters[uid].quota_key)
+        results = pipe.execute()
+        logger.debug(f"Pipeline execution results: {results}")
+
+        # Calculate remaining quotas and probabilities
+        remaining_quotas = []
+        for i in range(0, len(results), 2):
+            current_count = int(results[i] or 0)
+            quota = int(results[i + 1] or 0)
+            remaining = max(0, quota - current_count)
+            remaining_quotas.append(remaining)
+            logger.debug(
+                f"UID {self.uids[i // 2]}: Current count = {current_count}, Quota = {quota}, Remaining = {remaining}"
+            )
+
+        total_remaining = sum(remaining_quotas)
+        logger.info(f"Remaining quotas: {remaining_quotas}")
+        logger.info(f"Total remaining quota across all UIDs: {total_remaining}")
+        if total_remaining == 0:
+            logger.warning("No remaining quota available for any UID.")
             return []
-        probabilities = np.array(self.credits) / total_credit
-        max_available_uid = len([weight for weight in probabilities if weight > 0])
+
+        probabilities = np.array(remaining_quotas) / total_remaining
+        max_available_uid = len([p for p in probabilities if p > 0])
         k = min(k, max_available_uid)
+        logger.info(
+            f"Calculated probabilities for UIDs. Max available UIDs: {max_available_uid}, Adjusted k: {k}"
+        )
+
+        # Select UIDs based on remaining quota probabilities
         uids = np.random.choice(
             self.uids, size=k, replace=False, p=probabilities
         ).tolist()
+        logger.info(f"Selected UIDs for consumption: {uids}")
+
+        # Attempt to consume atomically
         consume_results = []
         for uid in uids:
+            logger.debug(f"Attempting to consume credit for UID {uid}.")
             consume_results.append(
                 self.serving_counters[uid].increment(task_credit, threshold)
             )
+
+        # Filter successful consumptions
         uids = [uid for uid, result in zip(uids, consume_results) if result]
-        logger.info(f"Consumed {task_credit} credit for {uids}.")
+        logger.info(f"Successfully consumed {task_credit} credit for UIDs: {uids}.")
         return uids
 
     def step(self, scores: list[float], total_uids: list[int]):
@@ -152,7 +190,7 @@ class MinerManager:
         miners = self.query(total_uids)
         for uid, score, credit_scale in zip(total_uids, scores, credit_scales):
             logger.info(
-                f"Processing UID {uid} with score {score}*credit_scale-{credit_scale}"
+                f"Processing UID {uid} with score {score}:score*credit_scale:{credit_scale}"
             )
             score = score * credit_scale
             miner = miners[uid]
