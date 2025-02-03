@@ -6,6 +6,7 @@ import numpy as np
 import bittensor as bt
 from .sql_schemas import Base, MinerMetadata
 from .serving_counter import ServingCounter
+from ...utilities.secure_request import get_headers
 from ...global_config import CONFIG
 from ...protocol import Credit
 import asyncio
@@ -95,6 +96,7 @@ class MinerManager:
             logger.success(
                 f"Serving counters initialized with rate limit: {self.serving_counters}"
             )
+            await self.post_metadata()
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in sync serving counter loop: {e}")
@@ -142,9 +144,17 @@ class MinerManager:
 
     def step(self, scores: list[float], total_uids: list[int]):
         logger.info(f"Updating scores for {len(total_uids)} miners")
+        credits = [self.credits[uid] for uid in total_uids]
+        credits = np.array(credits)
+        credit_scales = np.array(credits) / CONFIG.bandwidth.max_credit
+        credit_scales[credit_scales > 1] = 1
+        logger.info(f"Credit scales: {credit_scales}")
         miners = self.query(total_uids)
-        for uid, score in zip(total_uids, scores):
-            logger.info(f"Processing UID {uid} with score {score}")
+        for uid, score, credit_scale in zip(total_uids, scores, credit_scales):
+            logger.info(
+                f"Processing UID {uid} with score {score}*credit_scale-{credit_scale}"
+            )
+            score = score * credit_scale
             miner = miners[uid]
             # EMA with decay factor
             miner.accumulate_score = (
@@ -172,12 +182,27 @@ class MinerManager:
                 scores = scores / scores.sum()
             else:
                 scores = np.zeros_like(scores)
-            credit_scales = np.array(self.credits) / CONFIG.bandwidth.max_credit
-            credit_scales[credit_scales > 1] = 1
-            for uid, credit_scale in zip(uids, credit_scales):
-                logger.info(f"Credit scale for UID {uid}: {credit_scale}")
-                scores[uid] = scores[uid] * credit_scale
             return uids, scores.tolist()
         except Exception as e:
             logger.error(f"Error in weights: {e}")
             return [], []
+
+    async def post_metadata(self):
+        try:
+            logger.info("Posting metadata")
+            headers = get_headers(self.dendrite.keypair)
+            logger.debug(f"Headers: {headers}")
+            metadata = self.query()
+            metadata = {uid: miner.to_dict() for uid, miner in metadata.items()}
+            logger.info(f"Metadata: {metadata}")
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{CONFIG.subnet_report_url}/api/report_metadata",
+                    timeout=4,
+                    json=metadata,
+                    headers=headers,
+                )
+            logger.debug(f"Response: {response}")
+        except Exception as e:
+            logger.error(f"Error in post metadata: {e}")
+            return

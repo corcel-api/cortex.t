@@ -97,10 +97,12 @@ class Validator(base.BaseValidator):
 
     async def process_batch(self, uids, synapse, model_config):
         try:
-            axons_data = await self.w_subtensor_client.get(
-                "/api/axons", timeout=4, params={"uids": uids}
+            axons_data = await self.w_subtensor_client.post(
+                "/api/axons",
+                json={"uids": uids},
+                timeout=4,
             )
-            axons_data: list[str] = axons_data.json()
+            axons_data: list[str] = axons_data.json()["axons"]
             axons = [bt.AxonInfo.from_string(axon_data) for axon_data in axons_data]
             responses = await self.query_non_streaming(axons, synapse, model_config)
             logger.info(f"Received {len(responses)} responses")
@@ -236,10 +238,18 @@ class Validator(base.BaseValidator):
             )
             scores: list[float] = score_response.json()["scores"]
             logger.info(f"Scores: {scores}")
+            time_penalties = [
+                r.dendrite.process_time / r.timeout for r in valid_responses
+            ]
+            penalized_scores = [
+                max(score - penalty * 0.2, 0)
+                for score, penalty in zip(scores, time_penalties)
+            ]
+            logger.info(f"Penalized scores: {penalized_scores}")
             await self.miner_manager_client.post(
                 "/api/step",
                 json={
-                    "scores": scores,
+                    "scores": penalized_scores,
                     "total_uids": valid_uids_to_score,
                 },
             )
