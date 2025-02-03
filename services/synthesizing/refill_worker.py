@@ -39,7 +39,7 @@ def create_synthetic_payload(model_name: str):
             "model": model_name,
             "messages": messages,
             "seed": random.randint(0, 1000000),
-            "temperature": round(random.random() * 0.4, 2),
+            "temperature": round(random.random() * 0.1, 2),
         }
     elif model_name in ["dall-e-3"]:
         text = next(ds)["text"]

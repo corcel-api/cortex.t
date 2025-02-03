@@ -25,9 +25,9 @@ The miner implements rate limiting based on stake and network parameters:
 - Minimum stake requirement: 10,000
 - Rate limits are proportionally allocated based on stake
 - Credits refresh every 60 seconds
-- Each request consumes an amount of credit based on the model config
-- Minimum credit allocation: 128
-- Maximum credit allocation: 1024
+- Each request consumes an amount of credit based on the model config (e.g. dall-e-3 & gpt-4o-8k-tokens is 1 credit per request)
+- Minimum credit allocation: 64
+- Maximum credit allocation: 256
 
 ## Step-by-step setup
 
@@ -51,7 +51,7 @@ uv sync
 ```bash
 export OPENAI_API_KEY=your_openai_api_key
 export ANTHROPIC_API_KEY=your_anthropic_api_key
-pm2 start python --name "mining" -m neurons.miner --netuid 18 --wallet.hotkey default --wallet.name default --axon.port "your-public-port" --miner.credit "your-credit-commitment"
+pm2 start python --name "mining" -- -m neurons.miner --netuid 18 --wallet.hotkey default --wallet.name default --axon.port "your-public-port" --miner.credit "your-credit-commitment"
 ```
 Notes:
 - `your-public-port` is the port you want to expose your miner on

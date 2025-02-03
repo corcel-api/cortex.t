@@ -11,7 +11,7 @@ class MinerMetadata(Base):
 
     uid = Column(Integer, primary_key=True)
     accumulate_score = Column(Float, default=0.0)
-    credit = Column(Integer, default=CONFIG.bandwidth.min_credit)
+    credit = Column(Integer, default=0)
 
     def __init__(self, uid, accumulate_score=0.0, credit=CONFIG.bandwidth.min_credit):
         self.uid = uid

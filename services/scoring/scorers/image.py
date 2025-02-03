@@ -8,7 +8,7 @@ import tempfile
 from openai import AsyncOpenAI
 
 VISION_CLIENT = AsyncOpenAI(
-    api_key=os.getenv("TOGETHER_API_KEY"), base_url="https://api.together.xyz/v1"
+    api_key=os.getenv("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1"
 )
 
 
@@ -98,7 +98,7 @@ Here is the prompt string used to generate the image:
 """
     scoring_prompt = scoring_prompt.replace("{{PROMPT_STRING}}", prompt)
     output = await VISION_CLIENT.chat.completions.create(
-        model="Qwen/Qwen2-VL-72B-Instruct",
+        model="meta-llama/llama-3.2-90b-vision-instruct",
         messages=[
             {
                 "role": "user",
