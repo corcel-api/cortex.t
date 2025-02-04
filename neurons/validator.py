@@ -245,21 +245,26 @@ class Validator(base.BaseValidator):
         """Load and process streaming response"""
         try:
             start_time = time.time()
-            total_chunks = 0
+            streaming_chunks = []
+            synapse = None
 
             async for chunk in response:
-                total_chunks += 1
-
+                if isinstance(chunk, protocol.ChatStreamingProtocol):
+                    synapse = chunk
+                    continue
+                else:
+                    streaming_chunks.append(chunk)
+            synapse.streaming_chunks = streaming_chunks
             end_time = time.time()
             process_time = end_time - start_time
-            chunk.dendrite.process_time = process_time
+            synapse.dendrite.process_time = process_time
 
-            chunks_per_second = total_chunks / process_time
+            chunks_per_second = len(streaming_chunks) / process_time
             logger.success(
-                f"Loaded Streaming Response - {total_chunks} chunks - {process_time}s "
+                f"Loaded Streaming Response - {len(streaming_chunks)} chunks - {process_time}s "
                 f"- {chunks_per_second} chunks/s"
             )
-            return chunk
+            return synapse
         except Exception as e:
             logger.error(f"Error in load_streaming_response: {str(e)}")
             return None
@@ -295,7 +300,9 @@ class Validator(base.BaseValidator):
 
         uid_counts = await self.get_scored_counter()
         valid_uids_to_score = [uid for uid in valid_uids if uid_counts.get(uid, 0) < 4]
-
+        logger.info(
+            f"valid_uids: {valid_uids} - valid_uids_to_score: {valid_uids_to_score}"
+        )
         if not valid_uids_to_score:
             return
 
@@ -328,6 +335,14 @@ class Validator(base.BaseValidator):
         try:
             scores = await self._get_response_scores(valid_responses, base_request)
             penalized_scores = self._apply_time_penalties(valid_responses, scores)
+
+            logger.info(
+                f"model: {base_request.miner_payload.model} - uids: {valid_uids} - scores: {scores} - penalized_scores: {penalized_scores}"
+            )
+            if base_request.miner_payload.model == "dall-e-3":
+                logger.debug(
+                    f"valid_responses: {[r.miner_response for r in valid_responses]}"
+                )
 
             await self._update_miner_scores(valid_uids, penalized_scores)
             await self._update_scoring_records(valid_uids)

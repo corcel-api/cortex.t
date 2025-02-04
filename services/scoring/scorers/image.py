@@ -74,31 +74,16 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
         return 0
 
     scoring_prompt = f"""
-You are an AI tasked with evaluating the adherence of generated images to their corresponding prompt strings. Your job is to analyze how well the image matches the given prompt and assign a score from 0 to 10, where 0 indicates no adherence and 10 indicates perfect adherence.
-
-Please carefully examine the image and compare it to the prompt string. Consider the following aspects:
-1. How many elements from the prompt are present in the image?
-2. How accurately are these elements depicted?
-3. Does the overall composition and mood of the image match the prompt?
-4. Are there any significant elements in the image that were not mentioned in the prompt?
-
-Based on your analysis, determine a score from 0 to 10 that represents how well the image adheres to the prompt. Use this scale as a guide:
-0-2: Poor adherence, major discrepancies
-3-4: Below average adherence, significant mismatches
-5-6: Average adherence, some elements match but others are missing or inaccurate
-7-8: Good adherence, most elements match with minor discrepancies
-9-10: Excellent adherence, nearly perfect or perfect match
-
-Provide only the numerical score (0-10) inside <score> tags. Do not include any additional text with the score.
-
-Here is the prompt string used to generate the image:
-<prompt_string>
-{prompt}
-</prompt_string>
-"""
+    Your are provided with an image and a alt text.
+    Your task is to determine if the image is related to the alt text.
+    Please return "yes" if the image is related to the alt text, otherwise return "no".
+    Don't explain anything, just return "yes" or "no".
+    ---
+    Prompt: "{prompt}"
+    """
     scoring_prompt = scoring_prompt.replace("{{PROMPT_STRING}}", prompt)
     output = await VISION_CLIENT.chat.completions.create(
-        model="meta-llama/llama-3.2-90b-vision-instruct",
+        model="qwen/qwen-2-vl-72b-instruct",
         messages=[
             {
                 "role": "user",
@@ -118,8 +103,9 @@ Here is the prompt string used to generate the image:
     logger.info(output)
     completion = output.choices[0].message.content
     logger.info(completion)
-    score = re.search(r"<score>(.*?)</score>", completion).group(1)
-    return float(score) / 10
+    words = completion.lower().split()
+    score = "yes" in words and "no" not in words
+    return float(score)
 
 
 if __name__ == "__main__":

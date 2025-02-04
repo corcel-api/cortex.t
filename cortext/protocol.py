@@ -100,7 +100,6 @@ class ChatStreamingProtocol(StreamingSynapse):
                     chunk = MinerResponse(**data)
                     if not chunk.choices[0].delta.content:
                         continue
-                    self.streaming_chunks.append(chunk)
                     yield chunk
                 except Exception as e:
                     logger.error(e)
@@ -130,7 +129,6 @@ class ChatStreamingProtocol(StreamingSynapse):
             "header_size": int(headers.get("header_size", 0)),
             "dendrite": extract_info("bt_header_dendrite"),  # dendrite info
             "axon": extract_info("bt_header_axon"),  # axon info
-            "streaming_chunks": self.streaming_chunks,
             "miner_payload": self.miner_payload,
         }
 
