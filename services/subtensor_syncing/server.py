@@ -72,9 +72,7 @@ class AutoSyncSubtensor:
         logger.info(f"Current block: {current_block}")
         logger.info(f"Last update: {last_update}")
         logger.info("Getting weights from miner manager")
-        response = await self.miner_manager_client.post(
-            "/api/weights", timeout=120, json={"uid": self.uid}
-        )
+        response = await self.miner_manager_client.get("/api/weights", timeout=120)
         response_json = response.json()
         weights = response_json["weights"]
         uids = response_json["uids"]
