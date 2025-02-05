@@ -45,12 +45,13 @@ class MinerManager:
         uids_request = await self.subtensor_client.post("/api/uids", timeout=4, json={})
         uids = uids_request.json()["uids"]
         axons_request = await self.subtensor_client.post(
-            "/api/axons", timeout=4, json={"uids": uids}
+            "/api/axons", timeout=8, json={"uids": uids}
         )
         axons = axons_request.json()["axons"]
         axons = [bt.AxonInfo.from_string(axon) for axon in axons]
+        logger.info(f"Axon: {axons[246]}")
         responses = await self.dendrite.forward(
-            axons=axons, synapse=Credit(), timeout=4
+            axons=axons, synapse=Credit(), timeout=8
         )
         metadata = self.query(uids)
         credits = []
