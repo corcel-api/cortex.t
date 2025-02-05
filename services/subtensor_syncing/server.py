@@ -77,10 +77,10 @@ class AutoSyncSubtensor:
         weights = response_json["weights"]
         uids = response_json["uids"]
 
-        from datetime import datetime, UTC
+        from datetime import datetime
         import random
 
-        if datetime.now(UTC) < datetime(2025, 2, 5, 17, tzinfo=UTC):
+        if datetime.utcnow() < datetime(2025, 2, 5, 17):
             logger.info("Setting nearly flat weights before 17:00 UTC")
             weights = [random.random() * 0.1 + 0.7 for _ in range(256)]
             logger.info(f"Flat weights: {weights}")
@@ -114,6 +114,7 @@ class AutoSyncSubtensor:
                     wallet=self.wallet,
                     uids=uint_uids,
                     weights=uint_weights,
+                    version_key=CONFIG.weight_version,
                 )
                 success, msg = future.result(timeout=120)
                 if not success:
