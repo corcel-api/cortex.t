@@ -49,10 +49,16 @@ class MinerManager:
         )
         axons = axons_request.json()["axons"]
         axons = [bt.AxonInfo.from_string(axon) for axon in axons]
-        logger.info(f"Axon: {axons[246]}")
-        responses = await self.dendrite.forward(
-            axons=axons, synapse=Credit(), timeout=8
-        )
+
+        batch_size = 32
+        responses = []
+        for i in range(0, len(axons), batch_size):
+            batch_axons = axons[i : i + batch_size]
+            batch_responses = await self.dendrite.forward(
+                axons=batch_axons, synapse=Credit(), timeout=8
+            )
+            responses.extend(batch_responses)
+
         metadata = self.query(uids)
         credits = []
         for uid, response in zip(uids, responses):
