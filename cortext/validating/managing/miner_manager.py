@@ -45,13 +45,20 @@ class MinerManager:
         uids_request = await self.subtensor_client.post("/api/uids", timeout=4, json={})
         uids = uids_request.json()["uids"]
         axons_request = await self.subtensor_client.post(
-            "/api/axons", timeout=4, json={"uids": uids}
+            "/api/axons", timeout=8, json={"uids": uids}
         )
         axons = axons_request.json()["axons"]
         axons = [bt.AxonInfo.from_string(axon) for axon in axons]
-        responses = await self.dendrite.forward(
-            axons=axons, synapse=Credit(), timeout=4
-        )
+
+        batch_size = 32
+        responses = []
+        for i in range(0, len(axons), batch_size):
+            batch_axons = axons[i : i + batch_size]
+            batch_responses = await self.dendrite.forward(
+                axons=batch_axons, synapse=Credit(), timeout=8
+            )
+            responses.extend(batch_responses)
+
         metadata = self.query(uids)
         credits = []
         for uid, response in zip(uids, responses):
