@@ -92,6 +92,7 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     exif_data = load_exif_from_url(image_url)
 
     # Differentiate between DALL-E 2 and DALL-E 3
+    logger.info(f"EXIF data: {exif_data}")
     if "Claim_generator" not in exif_data:
         logger.info("Image is not a DALL-E 3 image")
         return 0
