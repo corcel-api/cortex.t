@@ -21,7 +21,8 @@ def create_image_prompt(text: str):
             {
                 "role": "user",
                 "content": f"""
-    Imagine a short image caption based on this alt text: {text}. Just return the caption, no other text.
+    Imagine a short image caption based on this alt text: {text}.
+    Just return the caption, no other text.
     ## Example
     - Alt text: Schubert's health was poor, especially during his final years
     - Caption: Franz Schubert composing at his desk, appearing thin and weary, with a pallid complexion characteristic of his declining health in the late 1820s.
@@ -80,7 +81,7 @@ def create_synthetic_payload(model_name: str):
         sentences = text.split(".")
         sentences = [s for s in sentences if len(s) > 2]
         caption = random.choice(sentences)
-        caption = create_image_prompt(caption)
+        # caption = create_image_prompt(caption)
         caption = f"Run this prompt, verbatim, without modifications: {caption}"
         size = random.choice(["1024x1024", "1792x1024", "1024x1792"])
         style = random.choice(["natural", "vivid"])
