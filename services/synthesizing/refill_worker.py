@@ -6,7 +6,6 @@ from tqdm import tqdm
 from datasets import load_dataset
 import random
 from cortext.protocol import MinerPayload, ImagePrompt
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
@@ -100,17 +99,6 @@ def create_synthetic_payload(model_name: str):
         raise ValueError(f"Model {model_name} not supported")
 
 
-def refill_model_pool(model, redis_key, needed):
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [
-            executor.submit(create_synthetic_payload, model) for _ in range(needed)
-        ]
-        for future in as_completed(futures):
-            payload = future.result()
-            payload = MinerPayload(**payload)
-            redis_client.rpush(redis_key, payload.model_dump_json())
-
-
 while True:
     logger.debug("Starting refill loop")
     models = CONFIG.bandwidth.model_configs.keys()
@@ -125,7 +113,12 @@ while True:
             needed = CONFIG.synthesize.synthetic_pool_size - current_size
             logger.info(f"Refilling {needed} synthetic payloads for {model}")
             pbar = tqdm(range(needed), desc=f"Refilling {model} pool")
-            refill_model_pool(model, redis_key, needed)
+            for _ in pbar:
+                payload = create_synthetic_payload(model)
+                payload = MinerPayload(
+                    **payload,
+                )
+                redis_client.rpush(redis_key, payload.model_dump_json())
         else:
             logger.info(f"Pool for {model} is full")
 
