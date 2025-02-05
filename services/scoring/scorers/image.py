@@ -56,6 +56,8 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     Validates if the URL matches the expected DALL-E API URL pattern.
     Returns 1 if valid and unique, 0 if invalid or duplicate.
     """
+    logger.info(f"Checking if {image_url} is in recent URLs")
+    logger.info(f"Recent URLs: {RECENT_URLS}")
     # Check if URL is already in recent URLs using async lock
     async with RECENT_URLS_LOCK:
         if image_url in RECENT_URLS:
