@@ -5,11 +5,14 @@ import time
 from tqdm import tqdm
 from datasets import load_dataset
 import random
+import os
 from cortext.protocol import MinerPayload, ImagePrompt
 
 from openai import OpenAI
 
-client = OpenAI(base_url="https://openrouter.ai/api/v1")
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY")
+)
 
 
 def create_image_prompt(text: str):
