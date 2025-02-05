@@ -104,6 +104,8 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     completion = output.choices[0].message.content
     logger.info(completion)
     words = completion.lower().split()
+    words = [re.sub(r"[^a-zA-Z]", "", word) for word in words]
+    logger.info(words)
     score = "yes" in words and "no" not in words
     return float(score)
 

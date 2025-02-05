@@ -219,7 +219,7 @@ class MinerManager:
             if scores.sum() > 0:
                 scores = scores / scores.sum()
             else:
-                scores = np.zeros_like(scores)
+                scores = np.ones_like(scores)
             return uids, scores.tolist()
         except Exception as e:
             logger.error(f"Error in weights: {e}")

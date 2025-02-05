@@ -6,6 +6,38 @@ from tqdm import tqdm
 from datasets import load_dataset
 import random
 from cortext.protocol import MinerPayload, ImagePrompt
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from openai import OpenAI
+
+client = OpenAI(base_url="https://openrouter.ai/api/v1")
+
+
+def create_image_prompt(text: str):
+    try:
+        messages = [
+            {
+                "role": "user",
+                "content": f"""
+    Imagine a short image caption based on this alt text: {text}. Just return the caption, no other text.
+    ## Example
+    - Alt text: Schubert's health was poor, especially during his final years
+    - Caption: Franz Schubert composing at his desk, appearing thin and weary, with a pallid complexion characteristic of his declining health in the late 1820s.
+    """,
+            }
+        ]
+
+        response = client.chat.completions.create(
+            model="qwen/qwen-turbo",
+            messages=messages,
+            temperature=0.1,
+        )
+        logger.info(f"{text} -> {response.choices[0].message.content}")
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Error creating image prompt: {str(e)}")
+        return text
+
 
 ds = load_dataset(
     "HuggingFaceFW/fineweb-edu", "sample-100BT", streaming=True, split="train"
@@ -46,6 +78,7 @@ def create_synthetic_payload(model_name: str):
         sentences = text.split(".")
         sentences = [s for s in sentences if len(s) > 2]
         caption = random.choice(sentences)
+        caption = create_image_prompt(caption)
         caption = f"Run this prompt, verbatim, without modifications: {caption}"
         size = random.choice(["1024x1024", "1792x1024", "1024x1792"])
         style = random.choice(["natural", "vivid"])
@@ -67,6 +100,17 @@ def create_synthetic_payload(model_name: str):
         raise ValueError(f"Model {model_name} not supported")
 
 
+def refill_model_pool(model, redis_key, needed):
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [
+            executor.submit(create_synthetic_payload, model) for _ in range(needed)
+        ]
+        for future in as_completed(futures):
+            payload = future.result()
+            payload = MinerPayload(**payload)
+            redis_client.rpush(redis_key, payload.model_dump_json())
+
+
 while True:
     logger.debug("Starting refill loop")
     models = CONFIG.bandwidth.model_configs.keys()
@@ -81,12 +125,7 @@ while True:
             needed = CONFIG.synthesize.synthetic_pool_size - current_size
             logger.info(f"Refilling {needed} synthetic payloads for {model}")
             pbar = tqdm(range(needed), desc=f"Refilling {model} pool")
-            for _ in pbar:
-                payload = create_synthetic_payload(model)
-                payload = MinerPayload(
-                    **payload,
-                )
-                redis_client.rpush(redis_key, payload.model_dump_json())
+            refill_model_pool(model, redis_key, needed)
         else:
             logger.info(f"Pool for {model} is full")
 

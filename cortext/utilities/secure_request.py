@@ -3,7 +3,7 @@ import time
 
 
 def get_headers(keypair: Keypair):
-    hotkey = keypair.public_key
+    hotkey = keypair.ss58_address
     message = f"{hotkey}:{time.time()}"
     signature = f"0x{keypair.sign(message).hex()}"
-    return {"Authorization": f"0x{signature}"}
+    return {"signature": signature, "ss58_address": hotkey, "message": message}
