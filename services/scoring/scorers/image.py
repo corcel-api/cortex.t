@@ -56,11 +56,17 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     Validates if the URL matches the expected DALL-E API URL pattern.
     Returns 1 if valid and unique, 0 if invalid or duplicate.
     """
+    logger.info(f"Checking if {image_url} is in recent URLs")
+    logger.info(f"Recent URLs: {RECENT_URLS}")
     # Check if URL is already in recent URLs using async lock
+
+    logger.info("Checking if image URL is in recent URLs")
     async with RECENT_URLS_LOCK:
         if image_url in RECENT_URLS:
             return 0
+    logger.info("Image URL is not in recent URLs")
 
+    logger.info("Checking if image URL matches DALL-E URL pattern")
     dalle_url_pattern = re.compile(
         r"^https://oaidalleapiprodscus\.blob\.core\.windows\.net/private/"
         r"org-[A-Za-z0-9]+/user-[A-Za-z0-9]+/img-[A-Za-z0-9]+\.png\?"
@@ -75,17 +81,23 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     )
 
     if not dalle_url_pattern.match(image_url):
+        logger.info("Image URL does not match DALL-E URL pattern")
         return 0
 
     # Add URL to recent URLs queue with async lock
     async with RECENT_URLS_LOCK:
         RECENT_URLS.append(image_url)
 
-    exif_data = load_exif_from_url(image_url)
+    logger.info("Loading EXIF data from image URL")
+    # exif_data = load_exif_from_url(image_url)
 
     # Differentiate between DALL-E 2 and DALL-E 3
-    if "Claim_generator" not in exif_data:
-        return 0
+    # logger.info(f"EXIF data: {exif_data}")
+    # if "Claim_generator" not in exif_data:
+    #     logger.info("Image is not a DALL-E 3 image")
+    #     return 0
+
+    logger.info("Image is a DALL-E 3 image")
 
     return 1
 

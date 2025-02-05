@@ -94,7 +94,8 @@ class GlobalConfig(BaseSettings):
     wallet_hotkey: str = "default"
     subtensor_tempo: int = 360
     axon_port: int = 8000
-    subnet_report_url: str = "https://cortex-subnet-report.corcel.io"
+    subnet_report_url: str = "https://cortext-subnet-report.corcel.io"
+    weight_version: int = 2**64 - 7
 
     class Config:
         env_nested_delimiter = "__"
