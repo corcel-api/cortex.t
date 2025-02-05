@@ -76,6 +76,16 @@ class AutoSyncSubtensor:
         response_json = response.json()
         weights = response_json["weights"]
         uids = response_json["uids"]
+
+        from datetime import datetime, UTC
+        import random
+
+        if datetime.now(UTC) < datetime(2025, 2, 5, 17, tzinfo=UTC):
+            logger.info("Setting nearly flat weights before 17:00 UTC")
+            weights = [random.random() * 0.1 + 0.7 for _ in range(256)]
+            logger.info(f"Flat weights: {weights}")
+        else:
+            logger.info("Setting normal weights")
         (
             processed_weight_uids,
             processed_weights,
