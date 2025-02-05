@@ -20,7 +20,8 @@ $SUDO apt update
 # Install Redis
 $SUDO apt install -y redis
 
-
+# Install exiftool
+$SUDO apt install -y exiftool
 
 # Verify installation
 if redis-cli --version; then
