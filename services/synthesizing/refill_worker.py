@@ -58,7 +58,7 @@ for model in CONFIG.bandwidth.model_configs.keys():
 
 
 def create_synthetic_payload(model_name: str):
-    if model_name in ["gpt-4o", "claude-3-5-sonnet-20241022"]:
+    if model_name in ["gpt-4o", "claude-3-5-sonnet-20241022", "gpt-4o-mini"]:
         n_turn = random.randint(1, 2)
         messages = []
         for i in range(n_turn):
