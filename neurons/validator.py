@@ -48,7 +48,6 @@ class ResponseProcessor:
                 logger.info(
                     f"Invalid response - {uid} - {response.dendrite.process_time}s"
                 )
-                logger.info(f"Response: {response}")
 
         return valid, invalid
 
