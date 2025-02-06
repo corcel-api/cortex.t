@@ -271,7 +271,7 @@ class MinerManager:
         uid_scores = [
             (uid, miner.accumulate_score)
             for uid, miner in miners.items()
-            if miner.accumulate_score > 0
+            if miner.accumulate_score > 0.05
         ]
 
         # Sort by accumulated score in descending order
@@ -296,13 +296,16 @@ class MinerManager:
             current = int(results[2 * index] or 0)
             quota = int(results[2 * index + 1] or 0)
             remaining = max(0, quota - current)
-            uid_remaining.append((uid, remaining))
+            uid_remaining.append((uid, remaining, miners[uid].accumulate_score))
             logger.debug(
                 f"UID {uid}: current_count = {current}, quota = {quota}, remaining = {remaining}"
             )
 
         sorted_top_uids = [
-            uid for uid, _ in sorted(uid_remaining, key=lambda x: x[1], reverse=True)
+            uid
+            for uid, _, _ in sorted(
+                uid_remaining, key=lambda x: x[1] * x[2], reverse=True
+            )
         ]
         logger.info(f"Top UIDs sorted by remaining credit: {sorted_top_uids}")
 
