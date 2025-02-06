@@ -31,7 +31,7 @@ class GlobalConfig(BaseSettings):
         min_stake=10000,
         model_configs={
             "gpt-4o": ModelConfig(
-                credit=1,
+                credit=4,
                 model="gpt-4o",
                 max_tokens=8096,
                 synapse_type="streaming-chat",
@@ -45,8 +45,23 @@ class GlobalConfig(BaseSettings):
                     "seed",
                 ],
             ),
-            "dall-e-3": ModelConfig(
+            "gpt-4o-mini": ModelConfig(
                 credit=1,
+                model="gpt-4o-mini",
+                max_tokens=8096,
+                synapse_type="streaming-chat",
+                timeout=32,
+                allowed_params=[
+                    "messages",
+                    "temperature",
+                    "max_tokens",
+                    "stream",
+                    "model",
+                    "seed",
+                ],
+            ),
+            "dall-e-3": ModelConfig(
+                credit=2,
                 model="dall-e-3",
                 timeout=32,
                 synapse_type="streaming-chat",
@@ -54,7 +69,7 @@ class GlobalConfig(BaseSettings):
                 allowed_params=["prompt", "n", "size", "response_format", "user"],
             ),
             "claude-3-5-sonnet-20241022": ModelConfig(
-                credit=1,
+                credit=4,
                 model="claude-3-5-sonnet-20241022",
                 timeout=32,
                 synapse_type="streaming-chat",
