@@ -28,6 +28,9 @@ class ServingCounter:
         Returns:
             bool: True if under rate limit, False if exceeded
         """
+        if self.quota == 0:
+            logger.info(f"Quota is 0 for {self.key}")
+            return False
         if ignore_threshold is not None:
             current_count = self.redis_client.get(self.key)
             if current_count is None:
