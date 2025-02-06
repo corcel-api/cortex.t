@@ -55,7 +55,12 @@ You can modify the default ports by setting the corresponding environment variab
 pm2 start python --name "cortex_validating" -- -m neurons.validator
 ```
 
-## Organic Serving
+5. Run the auto update script, it will check for updates every 30 minutes
+```bash
+pm2 start auto-update.sh --name "auto_updater"
+```
+
+## Organic Serving [Optional]
 1. Set admin api key
 ```
 export ADMIN_API_KEY=your_admin_api_key
