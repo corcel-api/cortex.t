@@ -251,3 +251,50 @@ class MinerManager:
         except Exception as e:
             logger.error(f"Error in post metadata: {e}")
             return
+
+    def consume_top_performers(self, n: int, task_credit: int, threshold: float = 1.0):
+        """
+        Consume credits from top N performing UIDs based on accumulated scores.
+
+        Args:
+            n (int): Number of top performers to select
+            task_credit (int): Amount of credit to consume
+            threshold (float): Threshold for credit consumption (default: 1.0)
+
+        Returns:
+            list[int]: List of UIDs that were successfully consumed
+        """
+        logger.info(f"Consuming credits from top {n} performers")
+
+        # Get all miners and their scores
+        miners = self.query()
+        uid_scores = [
+            (uid, miner.accumulate_score)
+            for uid, miner in miners.items()
+            if miner.accumulate_score > 0
+        ]
+
+        # Sort by score in descending order
+        uid_scores.sort(key=lambda x: x[1], reverse=True)
+
+        # Select top N UIDs
+        top_uids = [uid for uid, _ in uid_scores[:n]]
+        logger.info(f"Selected top {len(top_uids)} UIDs: {top_uids}")
+
+        # Attempt to consume credits
+        consume_results = []
+        for uid in top_uids:
+            logger.debug(f"Attempting to consume credit for top performer UID {uid}")
+            consume_results.append(
+                self.serving_counters[uid].increment(task_credit, threshold)
+            )
+
+        # Filter successful consumptions
+        successful_uids = [
+            uid for uid, result in zip(top_uids, consume_results) if result
+        ]
+        logger.info(
+            f"Successfully consumed {task_credit} credit for UIDs: {successful_uids}"
+        )
+
+        return successful_uids
