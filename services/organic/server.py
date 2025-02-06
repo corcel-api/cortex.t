@@ -167,7 +167,7 @@ async def chat_completions(
             response = await managing_client.post(
                 "/api/consume_top_performers",
                 json={
-                    "n": 1,  # Get single best performer
+                    "n": 128,  # Get single best performer
                     "task_credit": required_credits,
                     "threshold": 1.0,
                 },
