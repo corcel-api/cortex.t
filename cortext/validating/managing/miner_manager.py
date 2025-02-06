@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from loguru import logger
 import numpy as np
 import bittensor as bt
+import random
 from .sql_schemas import Base, MinerMetadata
 from .serving_counter import ServingCounter
 from ...utilities.secure_request import get_headers
@@ -297,4 +298,4 @@ class MinerManager:
             f"Successfully consumed {task_credit} credit for UIDs: {successful_uids}"
         )
 
-        return successful_uids
+        return [random.choice(successful_uids)]

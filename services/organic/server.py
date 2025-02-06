@@ -163,35 +163,69 @@ async def chat_completions(
                 detail=f"Insufficient credits. Required: {required_credits}, Remaining: {remaining_credits}",
             )
 
-        # Get top performing miner UID
-        response = await managing_client.post(
-            "/api/consume_top_performers",
-            json={
-                "n": 1,  # Get the single best performer
-                "task_credit": required_credits,
-                "threshold": 0.9,
-            },
-        )
+        async def get_next_uid():
+            response = await managing_client.post(
+                "/api/consume_top_performers",
+                json={
+                    "n": 1,  # Get single best performer
+                    "task_credit": required_credits,
+                    "threshold": 1.0,
+                },
+            )
+            uids = response.json()["uids"]
+            return uids[0] if uids else None
 
-        # Update credit usage
-        await update_credit_usage(redis_client, api_key.key, Decimal(required_credits))
+        async def try_uid(uid):
+            try:
+                axon_data = await subtensor_client.post(
+                    "/api/axons", timeout=4, json={"uids": [uid]}
+                )
+                axon_data: list[str] = axon_data.json()["axons"]
+                if not axon_data:
+                    return None
 
-        uid = response.json()["uids"][0]
-        logger.info(f"Consumed top performing miner uid: {uid}")
-        # Create synapse and forward request
+                axon = bt.AxonInfo.from_string(axon_data[0])
+                logger.info(f"Forwarding request to {axon}")
+                responses = await dendrite.forward(
+                    axons=[axon], synapse=synapse, streaming=True, timeout=64
+                )
+                if not responses[0].is_success:
+                    logger.error(f"Axon {axon} failed to respond")
+                    return None
+                return responses[0]
+            except Exception as e:
+                logger.error(f"Error with UID {uid}: {e}")
+                return None
+
+        # Create synapse for the request
         synapse = protocol.ChatStreamingProtocol(
             miner_payload=request,
         )
-        axon_data = await subtensor_client.post(
-            "/api/axons", timeout=4, json={"uids": [uid]}
-        )
-        axon_data: list[str] = axon_data.json()["axons"]
-        axon = bt.AxonInfo.from_string(axon_data[0])
-        logger.info(f"Forwarding request to {axon}")
-        responses = await dendrite.forward(
-            axons=[axon], synapse=synapse, streaming=True, timeout=64
-        )
-        response = responses[0]
+
+        # Try up to 3 times with different UIDs
+        response = None
+        max_retries = 3
+        for _ in range(max_retries):
+            uid = await get_next_uid()
+            if not uid:
+                raise HTTPException(
+                    status_code=500,
+                    detail="No top performing miners found",
+                )
+
+            response = await try_uid(uid)
+            if response is not None:
+                break
+            logger.warning(f"UID {uid} failed to respond, trying next miner...")
+
+        if response is None:
+            raise HTTPException(
+                status_code=500,
+                detail="All attempted miners failed to respond",
+            )
+
+        # Update credit usage only after successful response
+        await update_credit_usage(redis_client, api_key.key, Decimal(required_credits))
 
         async def stream_response():
             try:
