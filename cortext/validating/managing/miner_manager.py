@@ -4,7 +4,6 @@ from sqlalchemy.orm import sessionmaker
 from loguru import logger
 import numpy as np
 import bittensor as bt
-import random
 from .sql_schemas import Base, MinerMetadata
 from .serving_counter import ServingCounter
 from ...utilities.secure_request import get_headers
@@ -151,9 +150,6 @@ class MinerManager:
             quota = int(results[i + 1] or 0)
             remaining = max(0, quota - current_count)
             remaining_quotas.append(remaining)
-            logger.debug(
-                f"UID {self.uids[i // 2]}: Current count = {current_count}, Quota = {quota}, Remaining = {remaining}"
-            )
 
         total_remaining = sum(remaining_quotas)
         logger.info(f"Remaining quotas: {remaining_quotas}")
@@ -256,6 +252,9 @@ class MinerManager:
     def consume_top_performers(self, n: int, task_credit: int, threshold: float = 1.0):
         """
         Consume credits from top N performing UIDs based on accumulated scores.
+        After selecting the top N based on the scores, it further sorts them
+        in descending order by their remaining credit (i.e. more remaining credit first)
+        and then attempts to consume credit from the first UID satisfying the threshold.
 
         Args:
             n (int): Number of top performers to select
@@ -275,27 +274,47 @@ class MinerManager:
             if miner.accumulate_score > 0
         ]
 
-        # Sort by score in descending order
+        # Sort by accumulated score in descending order
         uid_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # Select top N UIDs
+        # Select top N UIDs based on accumulated scores
         top_uids = [uid for uid, _ in uid_scores[:n]]
-        logger.info(f"Selected top {len(top_uids)} UIDs: {top_uids}")
-
-        # Attempt to consume credits
-        consume_results = []
-        for uid in top_uids:
-            logger.debug(f"Attempting to consume credit for top performer UID {uid}")
-            consume_results.append(
-                self.serving_counters[uid].increment(task_credit, threshold)
-            )
-
-        # Filter successful consumptions
-        successful_uids = [
-            uid for uid, result in zip(top_uids, consume_results) if result
-        ]
         logger.info(
-            f"Successfully consumed {task_credit} credit for UIDs: {successful_uids}"
+            f"Selected top {len(top_uids)} UIDs based on accumulate_score: {top_uids}"
         )
 
-        return [random.choice(successful_uids)]
+        # Further sort the top UIDs by remaining credit in descending order (more remaining credit first)
+        # Using a Redis pipeline to atomically fetch the current consumption and quota for each UID.
+        pipe = self.redis_client.pipeline()
+        for uid in top_uids:
+            pipe.get(self.serving_counters[uid].key)
+            pipe.get(self.serving_counters[uid].quota_key)
+        results = pipe.execute()
+
+        uid_remaining = []
+        for index, uid in enumerate(top_uids):
+            current = int(results[2 * index] or 0)
+            quota = int(results[2 * index + 1] or 0)
+            remaining = max(0, quota - current)
+            uid_remaining.append((uid, remaining))
+            logger.debug(
+                f"UID {uid}: current_count = {current}, quota = {quota}, remaining = {remaining}"
+            )
+
+        sorted_top_uids = [
+            uid for uid, _ in sorted(uid_remaining, key=lambda x: x[1], reverse=True)
+        ]
+        logger.info(f"Top UIDs sorted by remaining credit: {sorted_top_uids}")
+
+        selected_uid = None
+        for uid in sorted_top_uids:
+            logger.debug(f"Attempting to consume credit for top performer UID {uid}")
+            if self.serving_counters[uid].increment(task_credit, threshold):
+                selected_uid = uid
+                break
+
+        if selected_uid is None:
+            logger.warning("No top performing miners found")
+            return []
+
+        return [selected_uid]
