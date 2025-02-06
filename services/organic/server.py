@@ -189,9 +189,6 @@ async def chat_completions(
                 responses = await dendrite.forward(
                     axons=[axon], synapse=synapse, streaming=True, timeout=64
                 )
-                if not responses[0].is_success:
-                    logger.error(f"Axon {axon} failed to respond")
-                    return None
                 return responses[0]
             except Exception as e:
                 logger.error(f"Error with UID {uid}: {e}")
