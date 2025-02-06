@@ -185,7 +185,7 @@ async def chat_completions(
         axon_data = await subtensor_client.post(
             "/api/axons", timeout=4, json={"uids": [uid]}
         )
-        axon_data: list[str] = axon_data.json()
+        axon_data: list[str] = axon_data.json()["axons"]
         axon = bt.AxonInfo.from_string(axon_data[0])
         logger.info(f"Forwarding request to {axon}")
         responses = await dendrite.forward(
