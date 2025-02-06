@@ -26,6 +26,12 @@ class WeightsResponse(BaseModel):
     uids: List[int]
 
 
+class TopPerformersRequest(BaseModel):
+    n: int
+    task_credit: int
+    threshold: float = 1.0
+
+
 miner_manager = MinerManager(
     network=CONFIG.subtensor_network,
     netuid=CONFIG.subtensor_netuid,
@@ -57,6 +63,17 @@ async def weights():
     logger.info("Getting weights")
     uids, weights = miner_manager.weights
     return WeightsResponse(weights=weights, uids=uids)
+
+
+@app.post("/api/consume_top_performers")
+async def consume_top_performers(request: TopPerformersRequest):
+    logger.info(
+        f"Consuming {request.task_credit} credit for top {request.n} performers"
+    )
+    uids = miner_manager.consume_top_performers(
+        n=request.n, task_credit=request.task_credit, threshold=request.threshold
+    )
+    return {"uids": uids}
 
 
 if __name__ == "__main__":

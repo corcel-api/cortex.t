@@ -163,22 +163,21 @@ async def chat_completions(
                 detail=f"Insufficient credits. Required: {required_credits}, Remaining: {remaining_credits}",
             )
 
-        # Get miner UID
+        # Get top performing miner UID
         response = await managing_client.post(
-            "/api/consume",
+            "/api/consume_top_performers",
             json={
-                "threshold": 0.9,
-                "k": 1,
+                "n": 1,  # Get the single best performer
                 "task_credit": required_credits,
+                "threshold": 0.9,
             },
         )
 
         # Update credit usage
         await update_credit_usage(redis_client, api_key.key, Decimal(required_credits))
 
-        # uid = response.json()["uids"][0]
-        uid = 1
-        logger.info(f"Consumed miner uid: {uid}")
+        uid = response.json()["uids"][0]
+        logger.info(f"Consumed top performing miner uid: {uid}")
         # Create synapse and forward request
         synapse = protocol.ChatStreamingProtocol(
             miner_payload=request,
