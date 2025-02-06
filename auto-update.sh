@@ -24,7 +24,27 @@ update_repo() {
         # Reinstall dependencies
         uv sync --prerelease=allow
         
-        pm2 restart all
+        prefix="cortex"
+        # Get list of PM2 processes with the cortext prefix
+        processes=$(pm2 list | grep "$prefix" | awk '{print $4}')
+
+        # Check if any matching processes were found
+        if [ -z "$processes" ]; then
+            echo "No cortext processes found"
+            exit 0
+        fi
+
+        # Restart each matching process
+        echo "Found cortext processes:"
+        echo "$processes"
+        echo "Restarting..."
+
+        for process in $processes; do
+            echo "Restarting $process..."
+            pm2 restart "$process"
+        done
+
+        echo "Restart complete!"
         
         echo "Update completed successfully!"
     else
