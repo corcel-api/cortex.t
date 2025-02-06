@@ -137,7 +137,6 @@ class MinerManager:
         logger.debug("Initializing Redis pipeline to fetch remaining quotas.")
         pipe = self.redis_client.pipeline()
         for uid in self.uids:
-            logger.debug(f"Fetching quota for UID {uid}.")
             pipe.get(self.serving_counters[uid].key)
             pipe.get(self.serving_counters[uid].quota_key)
         results = pipe.execute()
@@ -271,7 +270,7 @@ class MinerManager:
         uid_scores = [
             (uid, miner.accumulate_score)
             for uid, miner in miners.items()
-            if miner.accumulate_score > 0.05
+            if miner.accumulate_score > 0.01
         ]
 
         # Sort by accumulated score in descending order
@@ -280,7 +279,7 @@ class MinerManager:
         # Select top N UIDs based on accumulated scores
         top_uids = [uid for uid, _ in uid_scores[:n]]
         logger.info(
-            f"Selected top {len(top_uids)} UIDs based on accumulate_score: {top_uids}"
+            f"Selected top {len(top_uids)} UIDs based on accumulate_score: {top_uids}, {uid_scores[:n]}"
         )
 
         # Further sort the top UIDs by remaining credit in descending order (more remaining credit first)
@@ -300,6 +299,8 @@ class MinerManager:
             logger.debug(
                 f"UID {uid}: current_count = {current}, quota = {quota}, remaining = {remaining}"
             )
+
+        logger.info(f"UID remaining: {uid_remaining}")
 
         sorted_top_uids = [
             uid
