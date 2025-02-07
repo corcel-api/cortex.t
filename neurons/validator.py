@@ -253,6 +253,11 @@ class Validator(base.BaseValidator):
                     continue
                 else:
                     streaming_chunks.append(chunk)
+            if len(streaming_chunks) < 0:
+                logger.error(
+                    f"No streaming chunks found for {synapse.miner_payload.model}"
+                )
+                return None
             synapse.streaming_chunks = streaming_chunks
             end_time = time.time()
             process_time = end_time - start_time
