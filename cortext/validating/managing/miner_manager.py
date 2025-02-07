@@ -39,6 +39,13 @@ class MinerManager:
         asyncio.get_event_loop().create_task(
             self.run_task_in_background(self._sync_serving_counter_loop, 600)
         )
+        # Add new background task for reporting tracking data
+        logger.info("Creating background task for tracking data reporting")
+        asyncio.get_event_loop().create_task(
+            self.run_task_in_background(
+                self._report_tracking_data, 60
+            )  # Run every minute
+        )
         logger.success("MinerManager initialization complete")
 
     async def sync_credit(self):
@@ -322,3 +329,75 @@ class MinerManager:
             return []
 
         return [selected_uid]
+
+    async def _report_tracking_data(self):
+        """Collect and report tracking data from Redis"""
+        try:
+            logger.info("Collecting tracking data from Redis")
+
+            # Get all tracking keys
+            tracking_keys = self.redis_client.keys("tracking:*")
+            if not tracking_keys:
+                logger.debug("No tracking data found")
+                return
+
+            # Get all tracking data using pipeline
+            pipe = self.redis_client.pipeline()
+            for key in tracking_keys:
+                pipe.hgetall(key)
+            tracking_data = pipe.execute()
+
+            # Format data for reporting
+            batch_data = {}
+            for key, data in zip(tracking_keys, tracking_data):
+                if not data:  # Skip if data is empty
+                    continue
+
+                # Convert Redis bytes to proper types
+                formatted_data = {
+                    "batch_id": data[b"batch_id"].decode(),
+                    "uid": int(data[b"uid"]),
+                    "model": data[b"model"].decode(),
+                    "score": float(data[b"score"]),
+                    "response_time": float(data[b"response_time"]),
+                    "invalid_reason": data[b"invalid_reason"].decode(),
+                    "timestamp": float(data[b"timestamp"]),
+                }
+
+                # Group by batch_id
+                batch_id = formatted_data["batch_id"]
+                if batch_id not in batch_data:
+                    batch_data[batch_id] = []
+                batch_data[batch_id].append(formatted_data)
+
+            # Report each batch
+            headers = get_headers(self.dendrite.keypair)
+            async with httpx.AsyncClient() as client:
+                for batch_id, responses in batch_data.items():
+                    try:
+                        payload = {"batch_id": batch_id, "responses": responses}
+                        response = await client.post(
+                            f"{CONFIG.subnet_report_url}/api/report_batch",
+                            timeout=4,
+                            json=payload,
+                            headers=headers,
+                        )
+                        if response.status_code == 200:
+                            logger.info(f"Successfully reported batch {batch_id}")
+                            # Delete reported keys using pipeline
+                            pipe = self.redis_client.pipeline()
+                            for data in responses:
+                                key = f"tracking:{data['batch_id']}:{data['uid']}"
+                                pipe.delete(key)
+                            pipe.execute()
+                        else:
+                            logger.error(
+                                f"Failed to report batch {batch_id}: {response.status_code}"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error reporting batch {batch_id}: {str(e)}")
+                        continue
+
+        except Exception as e:
+            traceback.print_exc()
+            logger.error(f"Error in tracking data reporting: {str(e)}")

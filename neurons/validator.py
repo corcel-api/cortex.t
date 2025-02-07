@@ -9,7 +9,7 @@ import time
 import numpy as np
 from redis.asyncio import Redis
 from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -24,6 +24,19 @@ class ClientConfig:
     w_subtensor_url: str = f"http://{CONFIG.w_subtensor.host}:{CONFIG.w_subtensor.port}"
 
 
+@dataclass
+class ResponseTrackingData:
+    """Data structure for tracking response metrics"""
+
+    batch_id: str
+    uid: int
+    model: str
+    score: float
+    response_time: float
+    invalid_reason: str = ""
+    timestamp: float = field(default_factory=time.time)
+
+
 class ResponseProcessor:
     """Handles processing and validation of miner responses"""
 
@@ -32,7 +45,7 @@ class ResponseProcessor:
         uids: List[int], responses: List[protocol.ChatStreamingProtocol]
     ) -> Tuple[
         List[Tuple[int, protocol.ChatStreamingProtocol]],
-        List[Tuple[int, protocol.ChatStreamingProtocol]],
+        List[Tuple[int, protocol.ChatStreamingProtocol, str]],
     ]:
         valid = []
         invalid = []
@@ -44,9 +57,17 @@ class ResponseProcessor:
                     f"Valid response - {uid} - {response.dendrite.process_time}s"
                 )
             else:
-                invalid.append((uid, response))
+                invalid_reason = ""
+                if not response:
+                    invalid_reason = "no_response"
+                elif not response.is_success:
+                    invalid_reason = "not_successful"
+                elif not response.verify():
+                    invalid_reason = "verification_failed"
+
+                invalid.append((uid, response, invalid_reason))
                 logger.info(
-                    f"Invalid response - {uid} - {response.dendrite.process_time}s"
+                    f"Invalid response - {uid} - {response.dendrite.process_time if response else 0}s - Reason: {invalid_reason}"
                 )
 
         return valid, invalid
@@ -174,11 +195,12 @@ class Validator(base.BaseValidator):
         model_config: ModelConfig,
     ) -> None:
         """Process a batch of miners"""
+        batch_id = f"batch_{int(time.time())}_{model_config.model}"
         try:
             axons = await self._get_axons(uids)
             responses = await self.query_non_streaming(axons, synapse, model_config)
             logger.info(f"Received {len(responses)} responses")
-            await self.score(uids, responses, synapse)
+            await self.score(uids, responses, synapse, batch_id)
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in process_batch: {str(e)}")
@@ -287,6 +309,7 @@ class Validator(base.BaseValidator):
         uids: List[int],
         responses: List[protocol.ChatStreamingProtocol],
         base_request: protocol.ChatStreamingProtocol,
+        batch_id: str,
     ) -> None:
         """Score miner responses"""
         valid_pairs, invalid_pairs = self.response_processor.validate_responses(
@@ -295,8 +318,20 @@ class Validator(base.BaseValidator):
 
         # Handle invalid responses
         if invalid_pairs:
-            invalid_uids = [uid for uid, _ in invalid_pairs]
+            invalid_uids = [uid for uid, _, _ in invalid_pairs]
             await self._zero_invalid_miners(invalid_uids)
+
+            # Track invalid responses
+            for uid, response, invalid_reason in invalid_pairs:
+                tracking_data = ResponseTrackingData(
+                    batch_id=batch_id,
+                    uid=uid,
+                    model=base_request.miner_payload.model,
+                    score=0.0,
+                    response_time=response.dendrite.process_time if response else 0,
+                    invalid_reason=invalid_reason,
+                )
+                await self._store_tracking_data(tracking_data)
 
         # Process valid responses
         valid_uids = [uid for uid, _ in valid_pairs]
@@ -311,7 +346,7 @@ class Validator(base.BaseValidator):
             return
 
         await self._process_valid_responses(
-            valid_uids_to_score, valid_responses, base_request
+            valid_uids_to_score, valid_responses, base_request, batch_id
         )
 
     async def _zero_invalid_miners(self, invalid_uids: List[int]) -> None:
@@ -334,11 +369,25 @@ class Validator(base.BaseValidator):
         valid_uids: List[int],
         valid_responses: List[protocol.ChatStreamingProtocol],
         base_request: protocol.ChatStreamingProtocol,
+        batch_id: str,
     ) -> None:
         """Process and score valid responses"""
         try:
             scores = await self._get_response_scores(valid_responses, base_request)
             penalized_scores = self._apply_time_penalties(valid_responses, scores)
+
+            # Track valid responses
+            for uid, response, score in zip(
+                valid_uids, valid_responses, penalized_scores
+            ):
+                tracking_data = ResponseTrackingData(
+                    batch_id=batch_id,
+                    uid=uid,
+                    model=base_request.miner_payload.model,
+                    score=score,
+                    response_time=response.dendrite.process_time,
+                )
+                await self._store_tracking_data(tracking_data)
 
             logger.info(
                 f"model: {base_request.miner_payload.model} - uids: {valid_uids} - scores: {scores} - penalized_scores: {penalized_scores}"
@@ -407,6 +456,21 @@ class Validator(base.BaseValidator):
             pipe.incr(key)
             pipe.expire(key, 360)
         await pipe.execute()
+
+    async def _store_tracking_data(self, data: ResponseTrackingData) -> None:
+        """Store response tracking data in Redis"""
+        key = f"tracking:{data.batch_id}:{data.uid}"
+        value = {
+            "batch_id": data.batch_id,
+            "uid": data.uid,
+            "model": data.model,
+            "score": data.score,
+            "response_time": data.response_time,
+            "invalid_reason": data.invalid_reason,
+            "timestamp": data.timestamp,
+        }
+        await self.redis.hmset(key, value)
+        await self.redis.expire(key, 86400)  # Expire after 24 hours
 
 
 if __name__ == "__main__":
