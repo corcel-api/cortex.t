@@ -20,5 +20,4 @@ class BandwidthConfig(BaseModel):
 
     @property
     def sample_model(self) -> ModelConfig:
-        random.choice(list(self.model_configs.values()))
-        return self.model_configs["dall-e-3"]
+        return random.choice(list(self.model_configs.values()))
