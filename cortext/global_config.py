@@ -99,7 +99,7 @@ class GlobalConfig(BaseSettings):
     validating: ValidatingConfig = ValidatingConfig(
         synthetic_threshold=0.2,
         synthetic_batch_size=4,
-        synthetic_concurrent_batches=1,
+        synthetic_concurrent_batches=16,
     )
     w_subtensor: WSubtensorConfig = WSubtensorConfig(host="localhost", port=8104)
     organic: OrganicConfig = OrganicConfig(host="localhost", port=8105)
