@@ -13,7 +13,7 @@ VISION_CLIENT = AsyncOpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1"
 )
 
-RECENT_URLS = deque(maxlen=512)
+RECENT_URLS = deque(maxlen=1024)
 RECENT_URLS_LOCK = Lock()
 
 
