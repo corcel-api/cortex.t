@@ -223,7 +223,12 @@ class MinerManager:
             scores = []
             for uid, miner in self.query().items():
                 uids.append(uid)
-                scores.append(miner.accumulate_score)
+                score = (
+                    miner.accumulate_score
+                    if self.credits[uid] >= CONFIG.bandwidth.min_credit
+                    else 0
+                )
+                scores.append(score)
 
             scores = np.array(scores)
             if scores.sum() > 0:
