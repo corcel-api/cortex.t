@@ -1,6 +1,8 @@
 import pytest
 from cortext import CONFIG
 import httpx
+import subprocess
+import json
 
 
 @pytest.fixture(scope="module")
@@ -44,3 +46,19 @@ def test_synthesizing_client(synthesizing_client):
     response = synthesizing_client.post("/synthesize", json=model_config.model_dump())
     assert response.status_code == 200
     print(response.json())
+
+
+def test_exiftool():
+    try:
+        result = subprocess.run(
+            ["exiftool", "-json", "assets/dall-e-3.png"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        metadata = json.loads(result.stdout)[0]
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error running exiftool: {e}")
+    if not metadata:
+        raise Exception("No metadata found")
+    print(metadata)

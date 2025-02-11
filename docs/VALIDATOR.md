@@ -42,11 +42,13 @@ python -m cortext
 | Service | Default Port | Environment Variable | Process Command |
 |---------|-------------|---------------------|-----------------|
 | Redis | 6379 | `REDIS_PORT` & `REDIS__PORT` | `. scripts/install_redis.sh` |
+| ExifTool | N/A | N/A | `. scripts/install_exiftool.sh` |
 | Subtensor Sync | 8104 | `W_SUBTENSOR__PORT` | `pm2 start python --name "cortex_w_subtensor" -- -m services.subtensor_syncing.server` |
 | Scoring | 8101 | `SCORE__PORT` | `pm2 start python --name "cortex_scoring" -- -m services.scoring.server` |
 | Synthesizing | 8102 | `SYNTHESIZE__PORT` | `pm2 start python --name "cortex_synthesizing" -- -m services.synthesizing.server` |
 | Managing | 8103 | `MINER_MANAGER__PORT` | `pm2 start python --name "cortex_managing" -- -m services.managing.server` |
 | Synthesizing Worker | N/A | N/A | `pm2 start python --name "cortex_synthesizing_worker" -- -m services.synthesizing.refill_worker` |
+
 
 You can modify the default ports by setting the corresponding environment variables before starting the services.
 

@@ -13,7 +13,7 @@ VISION_CLIENT = AsyncOpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1"
 )
 
-RECENT_URLS = deque(maxlen=512)
+RECENT_URLS = deque(maxlen=1024)
 RECENT_URLS_LOCK = Lock()
 
 
@@ -25,9 +25,13 @@ def load_exif_from_url(image_url: str) -> dict:
     """Load EXIF data from an image URL."""
 
     # Create temp file in /tmp directory
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
-        temp_path = temp_file.name
-        download_image(image_url, temp_path)
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+            temp_path = temp_file.name
+            download_image(image_url, temp_path)
+    except Exception as e:
+        logger.error(f"Error downloading image: {e}")
+        return {}
 
     # Run exiftool and capture output
     try:
@@ -89,13 +93,13 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
         RECENT_URLS.append(image_url)
 
     logger.info("Loading EXIF data from image URL")
-    # exif_data = load_exif_from_url(image_url)
+    exif_data = load_exif_from_url(image_url)
 
     # Differentiate between DALL-E 2 and DALL-E 3
-    # logger.info(f"EXIF data: {exif_data}")
-    # if "Claim_generator" not in exif_data:
-    #     logger.info("Image is not a DALL-E 3 image")
-    #     return 0
+    logger.info(f"EXIF data: {exif_data}")
+    if "Claim_generator" not in exif_data:
+        logger.info("Image is not a DALL-E 3 image")
+        return 0
 
     logger.info("Image is a DALL-E 3 image")
 
