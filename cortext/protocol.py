@@ -93,6 +93,8 @@ class ChatStreamingProtocol(StreamingSynapse):
             line = line.decode("utf-8")
             if line.startswith("data: "):
                 data = line[6:].strip()  # Remove 'data: ' prefix
+                if not data:
+                    continue
                 if data == "[DONE]":
                     break
                 try:

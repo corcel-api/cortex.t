@@ -20,6 +20,4 @@ class BandwidthConfig(BaseModel):
 
     @property
     def sample_model(self) -> ModelConfig:
-        models = list(self.model_configs.values())
-        weights = [model.credit for model in models]
-        return random.choices(models, weights=weights, k=1)[0]
+        return random.choice(list(self.model_configs.values()))

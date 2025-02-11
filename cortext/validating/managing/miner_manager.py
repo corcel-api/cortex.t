@@ -39,6 +39,13 @@ class MinerManager:
         asyncio.get_event_loop().create_task(
             self.run_task_in_background(self._sync_serving_counter_loop, 600)
         )
+        # Add new background task for reporting tracking data
+        logger.info("Creating background task for tracking data reporting")
+        asyncio.get_event_loop().create_task(
+            self.run_task_in_background(
+                self._report_tracking_data, 60
+            )  # Run every minute
+        )
         logger.success("MinerManager initialization complete")
 
     async def sync_credit(self):
@@ -137,7 +144,6 @@ class MinerManager:
         logger.debug("Initializing Redis pipeline to fetch remaining quotas.")
         pipe = self.redis_client.pipeline()
         for uid in self.uids:
-            logger.debug(f"Fetching quota for UID {uid}.")
             pipe.get(self.serving_counters[uid].key)
             pipe.get(self.serving_counters[uid].quota_key)
         results = pipe.execute()
@@ -150,9 +156,6 @@ class MinerManager:
             quota = int(results[i + 1] or 0)
             remaining = max(0, quota - current_count)
             remaining_quotas.append(remaining)
-            logger.debug(
-                f"UID {self.uids[i // 2]}: Current count = {current_count}, Quota = {quota}, Remaining = {remaining}"
-            )
 
         total_remaining = sum(remaining_quotas)
         logger.info(f"Remaining quotas: {remaining_quotas}")
@@ -255,6 +258,9 @@ class MinerManager:
     def consume_top_performers(self, n: int, task_credit: int, threshold: float = 1.0):
         """
         Consume credits from top N performing UIDs based on accumulated scores.
+        After selecting the top N based on the scores, it further sorts them
+        in descending order by their remaining credit (i.e. more remaining credit first)
+        and then attempts to consume credit from the first UID satisfying the threshold.
 
         Args:
             n (int): Number of top performers to select
@@ -271,30 +277,127 @@ class MinerManager:
         uid_scores = [
             (uid, miner.accumulate_score)
             for uid, miner in miners.items()
-            if miner.accumulate_score > 0
+            if miner.accumulate_score > 0.01
         ]
 
-        # Sort by score in descending order
+        # Sort by accumulated score in descending order
         uid_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # Select top N UIDs
+        # Select top N UIDs based on accumulated scores
         top_uids = [uid for uid, _ in uid_scores[:n]]
-        logger.info(f"Selected top {len(top_uids)} UIDs: {top_uids}")
-
-        # Attempt to consume credits
-        consume_results = []
-        for uid in top_uids:
-            logger.debug(f"Attempting to consume credit for top performer UID {uid}")
-            consume_results.append(
-                self.serving_counters[uid].increment(task_credit, threshold)
-            )
-
-        # Filter successful consumptions
-        successful_uids = [
-            uid for uid, result in zip(top_uids, consume_results) if result
-        ]
         logger.info(
-            f"Successfully consumed {task_credit} credit for UIDs: {successful_uids}"
+            f"Selected top {len(top_uids)} UIDs based on accumulate_score: {top_uids}, {uid_scores[:n]}"
         )
 
-        return successful_uids
+        # Further sort the top UIDs by remaining credit in descending order (more remaining credit first)
+        # Using a Redis pipeline to atomically fetch the current consumption and quota for each UID.
+        pipe = self.redis_client.pipeline()
+        for uid in top_uids:
+            pipe.get(self.serving_counters[uid].key)
+            pipe.get(self.serving_counters[uid].quota_key)
+        results = pipe.execute()
+
+        uid_remaining = []
+        for index, uid in enumerate(top_uids):
+            current = int(results[2 * index] or 0)
+            quota = int(results[2 * index + 1] or 0)
+            remaining = max(0, quota - current)
+            uid_remaining.append((uid, remaining, miners[uid].accumulate_score))
+            logger.debug(
+                f"UID {uid}: current_count = {current}, quota = {quota}, remaining = {remaining}"
+            )
+
+        logger.info(f"UID remaining: {uid_remaining}")
+
+        sorted_top_uids = [
+            uid
+            for uid, _, _ in sorted(
+                uid_remaining, key=lambda x: x[1] * x[2], reverse=True
+            )
+        ]
+        logger.info(f"Top UIDs sorted by remaining credit: {sorted_top_uids}")
+
+        selected_uid = None
+        for uid in sorted_top_uids:
+            logger.debug(f"Attempting to consume credit for top performer UID {uid}")
+            if self.serving_counters[uid].increment(task_credit, threshold):
+                selected_uid = uid
+                break
+
+        if selected_uid is None:
+            logger.warning("No top performing miners found")
+            return []
+
+        return [selected_uid]
+
+    async def _report_tracking_data(self):
+        """Collect and report tracking data from Redis"""
+        try:
+            logger.info("Collecting tracking data from Redis")
+
+            # Get all tracking keys
+            tracking_keys = self.redis_client.keys("tracking:*")
+            if not tracking_keys:
+                logger.debug("No tracking data found")
+                return
+
+            # Get all tracking data using pipeline
+            pipe = self.redis_client.pipeline()
+            for key in tracking_keys:
+                pipe.hgetall(key)
+            tracking_data = pipe.execute()
+
+            # Format data for reporting
+            batch_data = {}
+            for key, data in zip(tracking_keys, tracking_data):
+                if not data:  # Skip if data is empty
+                    continue
+
+                # Convert Redis bytes to proper types
+                formatted_data = {
+                    "batch_id": data[b"batch_id"].decode(),
+                    "uid": int(data[b"uid"]),
+                    "model": data[b"model"].decode(),
+                    "score": float(data[b"score"]),
+                    "response_time": float(data[b"response_time"]),
+                    "invalid_reason": data[b"invalid_reason"].decode(),
+                    "timestamp": float(data[b"timestamp"]),
+                }
+
+                # Group by batch_id
+                batch_id = formatted_data["batch_id"]
+                if batch_id not in batch_data:
+                    batch_data[batch_id] = []
+                batch_data[batch_id].append(formatted_data)
+
+            # Report each batch
+            headers = get_headers(self.dendrite.keypair)
+            async with httpx.AsyncClient() as client:
+                for batch_id, responses in batch_data.items():
+                    try:
+                        payload = {"batch_id": batch_id, "responses": responses}
+                        response = await client.post(
+                            f"{CONFIG.subnet_report_url}/api/report_batch",
+                            timeout=4,
+                            json=payload,
+                            headers=headers,
+                        )
+                        if response.status_code == 200:
+                            logger.info(f"Successfully reported batch {batch_id}")
+                            # Delete reported keys using pipeline
+                            pipe = self.redis_client.pipeline()
+                            for data in responses:
+                                key = f"tracking:{data['batch_id']}:{data['uid']}"
+                                pipe.delete(key)
+                            pipe.execute()
+                        else:
+                            logger.error(
+                                f"Failed to report batch {batch_id}: {response.status_code}"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error reporting batch {batch_id}: {str(e)}")
+                        continue
+
+        except Exception as e:
+            traceback.print_exc()
+            logger.error(f"Error in tracking data reporting: {str(e)}")
