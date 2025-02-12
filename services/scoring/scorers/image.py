@@ -21,11 +21,6 @@ class ClipSimilarity:
     processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch16")
     tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch16")
 
-    def __init__(self):
-        self.model.eval()
-        self.processor.eval()
-        self.tokenizer.eval()
-
     def __call__(self, image, prompt) -> float:
         image_emb = (
             self.model.get_text_features(
