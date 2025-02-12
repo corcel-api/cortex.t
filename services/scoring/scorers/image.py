@@ -9,15 +9,48 @@ from collections import deque
 from asyncio import Lock
 from PIL import Image
 import torch
-from transformers import pipeline
+import numpy as np
+from transformers import AutoModel, AutoImageProcessor, AutoTokenizer
 
 RECENT_URLS = deque(maxlen=10000)
 RECENT_URLS_LOCK = Lock()
 
 
-CLIP_DETECTOR = pipeline(
-    model="openai/clip-vit-base-patch16", task="zero-shot-image-classification"
-)
+class ClipSimilarity:
+    model = AutoModel.from_pretrained("openai/clip-vit-base-patch16").to("cpu")
+    processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch16")
+    tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch16")
+
+    def __init__(self):
+        self.model.eval()
+        self.processor.eval()
+        self.tokenizer.eval()
+
+    def __call__(self, image, prompt) -> float:
+        image_emb = (
+            self.model.get_text_features(
+                **self.tokenizer([prompt], truncation=True, return_tensors="pt")
+            )[0]
+            .detach()
+            .cpu()
+            .numpy()
+        )
+        text_emb = (
+            self.model.get_image_features(
+                **self.processor([image], return_tensors="pt")
+            )[0]
+            .detach()
+            .cpu()
+            .numpy()
+        )
+
+        similarity = np.dot(image_emb, text_emb) / (
+            np.linalg.norm(image_emb) * np.linalg.norm(text_emb)
+        )
+        return similarity
+
+
+CLIP_SIMILARITY = ClipSimilarity()
 
 
 def download_image(url, save_as):
@@ -105,9 +138,7 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     try:
         logger.info("Calculating CLIP score")
         with torch.no_grad():
-            clip_out = CLIP_DETECTOR(image, candidate_labels=[prompt])
-            logger.info(f"CLIP output: {clip_out}")
-            score = clip_out[0]["score"]
+            score = CLIP_SIMILARITY(image, prompt)
             logger.info(f"CLIP score: {score}")
             if score > 0.1:
                 return 1
