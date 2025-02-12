@@ -103,9 +103,12 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
         return 0
 
     try:
+        logger.info("Calculating CLIP score")
         with torch.no_grad():
             clip_out = CLIP_DETECTOR(image, candidate_labels=[prompt])
+            logger.info(f"CLIP output: {clip_out}")
             score = clip_out[0]["score"]
+            logger.info(f"CLIP score: {score}")
             if score > 0.1:
                 return 1
             else:
