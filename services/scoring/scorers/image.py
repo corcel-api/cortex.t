@@ -131,6 +131,12 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
         return 0
 
     try:
+        image_size = image.size
+        width, height = image_size
+        logger.info(f"Image size: {image_size}, Requested size: {size}")
+        if f"{width}x{height}" != size:
+            logger.info("Image size does not match requested size")
+            return 0
         logger.info("Calculating CLIP score")
         with torch.no_grad():
             score = CLIP_SIMILARITY(image, prompt)
