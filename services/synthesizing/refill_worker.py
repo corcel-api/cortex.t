@@ -82,7 +82,6 @@ def create_synthetic_payload(model_name: str):
         sentences = [s for s in sentences if len(s) > 2]
         caption = random.choice(sentences)
         # caption = create_image_prompt(caption)
-        caption = f"Run this prompt, verbatim, without modifications: {caption}"
         size = random.choice(["1024x1024", "1792x1024", "1024x1792"])
         style = random.choice(["natural", "vivid"])
         quality = random.choice(["standard", "hd"])
