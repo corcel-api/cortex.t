@@ -142,7 +142,7 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
             score = CLIP_SIMILARITY(image, prompt)
             logger.info(f"Prompt: {prompt}")
             logger.info(f"CLIP score: {score}")
-            if score > 0.2:
+            if score > 0.225:
                 return 1
             else:
                 return 0
