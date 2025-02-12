@@ -5,16 +5,19 @@ import json
 import os
 import urllib.request
 import tempfile
-from openai import AsyncOpenAI
 from collections import deque
 from asyncio import Lock
+from PIL import Image
+import torch
+from transformers import pipeline
 
-VISION_CLIENT = AsyncOpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1"
-)
-
-RECENT_URLS = deque(maxlen=1024)
+RECENT_URLS = deque(maxlen=10000)
 RECENT_URLS_LOCK = Lock()
+
+
+CLIP_DETECTOR = pipeline(
+    model="openai/clip-vit-base-patch16", task="zero-shot-image-classification"
+)
 
 
 def download_image(url, save_as):
@@ -31,7 +34,7 @@ def load_exif_from_url(image_url: str) -> dict:
             download_image(image_url, temp_path)
     except Exception as e:
         logger.error(f"Error downloading image: {e}")
-        return {}
+        return {}, None
 
     # Run exiftool and capture output
     try:
@@ -45,32 +48,33 @@ def load_exif_from_url(image_url: str) -> dict:
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing exiftool output: {e}")
         metadata = {}
-
     try:
+        image = Image.open(temp_path)
         os.remove(temp_path)
     except OSError as e:
         logger.warning(f"Error removing temp file: {e}")
 
-    return metadata
+    return metadata, image
 
 
-async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> int:
-    """Score an image based on its deterministic score.
+async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> float:
+    """Score an image based on deterministic criteria and prompt similarity.
 
-    Validates if the URL matches the expected DALL-E API URL pattern.
-    Returns 1 if valid and unique, 0 if invalid or duplicate.
+    Returns a score between 0 and 1 based on:
+    - DALL-E URL pattern validation
+    - Image uniqueness check
+    - DALL-E 3 metadata verification
+    - Prompt similarity using SigLIP
     """
+    # First check DALL-E criteria
     logger.info(f"Checking if {image_url} is in recent URLs")
-    logger.info(f"Recent URLs: {RECENT_URLS}")
-    # Check if URL is already in recent URLs using async lock
 
-    logger.info("Checking if image URL is in recent URLs")
+    # Check if URL is already in recent URLs using async lock
     async with RECENT_URLS_LOCK:
         if image_url in RECENT_URLS:
             return 0
-    logger.info("Image URL is not in recent URLs")
 
-    logger.info("Checking if image URL matches DALL-E URL pattern")
+    # Validate DALL-E URL pattern
     dalle_url_pattern = re.compile(
         r"^https://oaidalleapiprodscus\.blob\.core\.windows\.net/private/"
         r"org-[A-Za-z0-9]+/user-[A-Za-z0-9]+/img-[A-Za-z0-9]+\.png\?"
@@ -88,58 +92,28 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
         logger.info("Image URL does not match DALL-E URL pattern")
         return 0
 
-    # Add URL to recent URLs queue with async lock
+    # Add URL to recent URLs queue
     async with RECENT_URLS_LOCK:
         RECENT_URLS.append(image_url)
 
-    logger.info("Loading EXIF data from image URL")
-    exif_data = load_exif_from_url(image_url)
-
-    # Differentiate between DALL-E 2 and DALL-E 3
-    logger.info(f"EXIF data: {exif_data}")
+    # Check DALL-E 3 metadata
+    exif_data, image = load_exif_from_url(image_url)
     if "Claim_generator" not in exif_data:
         logger.info("Image is not a DALL-E 3 image")
         return 0
 
-    logger.info("Image is a DALL-E 3 image")
+    try:
+        with torch.no_grad():
+            clip_out = CLIP_DETECTOR(image, candidate_labels=[prompt])
+            score = clip_out[0]["score"]
+            if score > 0.1:
+                return 1
+            else:
+                return 0
 
-    return 1
-
-    # scoring_prompt = f"""
-    # Your are provided with an image and a alt text.
-    # Your task is to determine if the image is related to the alt text.
-    # Please return "yes" if the image is related to the alt text, otherwise return "no".
-    # Don't explain anything, just return "yes" or "no".
-    # ---
-    # Prompt: "{prompt}"
-    # """
-    # scoring_prompt = scoring_prompt.replace("{{PROMPT_STRING}}", prompt)
-    # output = await VISION_CLIENT.chat.completions.create(
-    #     model="qwen/qwen-2-vl-72b-instruct",
-    #     messages=[
-    #         {
-    #             "role": "user",
-    #             "content": [
-    #                 {"type": "text", "text": scoring_prompt},
-    #                 {
-    #                     "type": "image_url",
-    #                     "image_url": {
-    #                         "url": image_url,
-    #                     },
-    #                 },
-    #             ],
-    #         }
-    #     ],
-    #     stream=False,
-    # )
-    # logger.info(output)
-    # completion = output.choices[0].message.content
-    # logger.info(completion)
-    # words = completion.lower().split()
-    # words = [re.sub(r"[^a-zA-Z]", "", word) for word in words]
-    # logger.info(words)
-    # score = "yes" in words and "no" not in words
-    # return float(score)
+    except Exception as e:
+        logger.error(f"Error calculating SigLIP score: {e}")
+        return 0
 
 
 if __name__ == "__main__":
