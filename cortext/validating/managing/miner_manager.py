@@ -34,8 +34,6 @@ class MinerManager:
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
 
-        self.is_synced = False
-
     async def run_background_tasks(self):
         # Get the current event loop
         logger.info("Initializing serving counters")
@@ -117,7 +115,6 @@ class MinerManager:
                 f"Serving counters initialized with rate limit: {self.serving_counters}"
             )
             await self.post_metadata()
-            self.is_synced = True
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in sync serving counter loop: {e}")
