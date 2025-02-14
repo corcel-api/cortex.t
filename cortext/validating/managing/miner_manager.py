@@ -37,6 +37,7 @@ class MinerManager:
         # Create background tasks using the existing loop
         loop = asyncio.get_event_loop()
         logger.info("Creating background task for serving counter sync")
+        loop.run_until_complete(self._sync_serving_counter_loop())
         loop.create_task(
             self.run_task_in_background(self._sync_serving_counter_loop, 600)
         )
