@@ -33,19 +33,23 @@ class MinerManager:
         Base.metadata.create_all(self.engine)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
+
+    async def run_background_tasks(self):
+        # Get the current event loop
         logger.info("Initializing serving counters")
-        asyncio.run(self._sync_serving_counter_loop())
+        loop = asyncio.get_running_loop()
+        # Create background tasks
         logger.info("Creating background task for serving counter sync")
-        asyncio.get_event_loop().create_task(
+        loop.create_task(
             self.run_task_in_background(self._sync_serving_counter_loop, 600)
         )
-        # Add new background task for reporting tracking data
         logger.info("Creating background task for tracking data reporting")
-        asyncio.get_event_loop().create_task(
+        loop.create_task(
             self.run_task_in_background(
                 self._report_tracking_data, 60
             )  # Run every minute
         )
+
         logger.success("MinerManager initialization complete")
 
     async def sync_credit(self):
@@ -77,8 +81,8 @@ class MinerManager:
 
     async def run_task_in_background(self, task, repeat_interval: int = 600):
         while True:
-            await asyncio.sleep(repeat_interval)
             await task()
+            await asyncio.sleep(repeat_interval)
 
     async def _sync_serving_counter_loop(self):
         try:

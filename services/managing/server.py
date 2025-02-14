@@ -7,7 +7,19 @@ from pydantic import BaseModel
 from typing import List
 
 
+miner_manager = MinerManager(
+    network=CONFIG.subtensor_network,
+    netuid=CONFIG.subtensor_netuid,
+    wallet_name=CONFIG.wallet_name,
+    wallet_hotkey=CONFIG.wallet_hotkey,
+)
+
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup():
+    await miner_manager.run_background_tasks()
 
 
 class ConsumeRequest(BaseModel):
@@ -30,14 +42,6 @@ class TopPerformersRequest(BaseModel):
     n: int
     task_credit: int
     threshold: float = 1.0
-
-
-miner_manager = MinerManager(
-    network=CONFIG.subtensor_network,
-    netuid=CONFIG.subtensor_netuid,
-    wallet_name=CONFIG.wallet_name,
-    wallet_hotkey=CONFIG.wallet_hotkey,
-)
 
 
 @app.post("/api/consume")
