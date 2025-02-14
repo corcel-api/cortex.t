@@ -34,18 +34,20 @@ class MinerManager:
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
         logger.info("Initializing serving counters")
-        asyncio.run(self._sync_serving_counter_loop())
+        # Create background tasks using the existing loop
+        loop = asyncio.get_event_loop()
         logger.info("Creating background task for serving counter sync")
-        asyncio.get_event_loop().create_task(
+        loop.create_task(
             self.run_task_in_background(self._sync_serving_counter_loop, 600)
         )
-        # Add new background task for reporting tracking data
         logger.info("Creating background task for tracking data reporting")
-        asyncio.get_event_loop().create_task(
+        loop.create_task(
             self.run_task_in_background(
                 self._report_tracking_data, 60
             )  # Run every minute
         )
+        # Run initial sync
+        loop.create_task(self._sync_serving_counter_loop())
         logger.success("MinerManager initialization complete")
 
     async def sync_credit(self):
