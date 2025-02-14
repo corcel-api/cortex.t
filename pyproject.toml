@@ -10,7 +10,7 @@ dependencies = [
     "numpy",
     "opencv-python",
     "loguru",
-    "bittensor==8.5.2",
+    "bittensor==9.0.0",
     "redis",
     "sqlalchemy",
     "pandas",
@@ -25,6 +25,7 @@ dependencies = [
     "transformers>=4.48.3",
     "torch>=2.6.0",
     "sentencepiece>=0.2.0",
+    "substrate-interface",
 ]
 
 
