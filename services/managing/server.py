@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize MinerManager with the running loop
     global miner_manager
-    miner_manager = MinerManager(
+    miner_manager = await MinerManager(
         network=CONFIG.subtensor_network,
         netuid=CONFIG.subtensor_netuid,
         wallet_name=CONFIG.wallet_name,

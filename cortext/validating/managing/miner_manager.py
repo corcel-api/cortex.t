@@ -15,7 +15,9 @@ import traceback
 
 
 class MinerManager:
-    def __init__(self, network: str, netuid: int, wallet_name: str, wallet_hotkey: str):
+    async def __init__(
+        self, network: str, netuid: int, wallet_name: str, wallet_hotkey: str
+    ):
         self.subtensor = bt.subtensor(network=network)
         self.metagraph = self.subtensor.metagraph(netuid=netuid)
         self.wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
@@ -33,11 +35,16 @@ class MinerManager:
         Base.metadata.create_all(self.engine)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
-        logger.info("Initializing serving counters")
-        # Create background tasks using the existing loop
+
+        logger.info("Creating background tasks")
         loop = asyncio.get_event_loop()
+
+        # Wait for initial sync to complete
+        logger.info("Running initial serving counter sync")
+        await self._sync_serving_counter_loop()
+
+        # Create background tasks for periodic updates
         logger.info("Creating background task for serving counter sync")
-        loop.run_until_complete(self._sync_serving_counter_loop())
         loop.create_task(
             self.run_task_in_background(self._sync_serving_counter_loop, 600)
         )
@@ -47,8 +54,6 @@ class MinerManager:
                 self._report_tracking_data, 60
             )  # Run every minute
         )
-        # Run initial sync
-        loop.create_task(self._sync_serving_counter_loop())
         logger.success("MinerManager initialization complete")
 
     async def sync_credit(self):
