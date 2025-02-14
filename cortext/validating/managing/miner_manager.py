@@ -15,9 +15,7 @@ import traceback
 
 
 class MinerManager:
-    async def __init__(
-        self, network: str, netuid: int, wallet_name: str, wallet_hotkey: str
-    ):
+    def __init__(self, network: str, netuid: int, wallet_name: str, wallet_hotkey: str):
         self.subtensor = bt.subtensor(network=network)
         self.metagraph = self.subtensor.metagraph(netuid=netuid)
         self.wallet = bt.wallet(name=wallet_name, hotkey=wallet_hotkey)
@@ -36,14 +34,13 @@ class MinerManager:
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
 
-        logger.info("Creating background tasks")
-        loop = asyncio.get_event_loop()
+        self.is_synced = False
 
-        # Wait for initial sync to complete
-        logger.info("Running initial serving counter sync")
-        await self._sync_serving_counter_loop()
-
-        # Create background tasks for periodic updates
+    async def run_background_tasks(self):
+        # Get the current event loop
+        logger.info("Initializing serving counters")
+        loop = asyncio.get_running_loop()
+        # Create background tasks
         logger.info("Creating background task for serving counter sync")
         loop.create_task(
             self.run_task_in_background(self._sync_serving_counter_loop, 600)
@@ -54,6 +51,7 @@ class MinerManager:
                 self._report_tracking_data, 60
             )  # Run every minute
         )
+
         logger.success("MinerManager initialization complete")
 
     async def sync_credit(self):
@@ -85,8 +83,8 @@ class MinerManager:
 
     async def run_task_in_background(self, task, repeat_interval: int = 600):
         while True:
-            await asyncio.sleep(repeat_interval)
             await task()
+            await asyncio.sleep(repeat_interval)
 
     async def _sync_serving_counter_loop(self):
         try:
@@ -119,6 +117,7 @@ class MinerManager:
                 f"Serving counters initialized with rate limit: {self.serving_counters}"
             )
             await self.post_metadata()
+            self.is_synced = True
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error in sync serving counter loop: {e}")
