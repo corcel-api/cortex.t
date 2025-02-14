@@ -5,9 +5,35 @@ from loguru import logger
 import uvicorn
 from pydantic import BaseModel
 from typing import List
+import asyncio
+from contextlib import asynccontextmanager
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create event loop if it doesn't exist
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    # Initialize MinerManager with the running loop
+    global miner_manager
+    miner_manager = MinerManager(
+        network=CONFIG.subtensor_network,
+        netuid=CONFIG.subtensor_netuid,
+        wallet_name=CONFIG.wallet_name,
+        wallet_hotkey=CONFIG.wallet_hotkey,
+    )
+
+    yield
+
+    # Cleanup if needed
+    await loop.shutdown_asyncgens()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class ConsumeRequest(BaseModel):
@@ -30,14 +56,6 @@ class TopPerformersRequest(BaseModel):
     n: int
     task_credit: int
     threshold: float = 1.0
-
-
-miner_manager = MinerManager(
-    network=CONFIG.subtensor_network,
-    netuid=CONFIG.subtensor_netuid,
-    wallet_name=CONFIG.wallet_name,
-    wallet_hotkey=CONFIG.wallet_hotkey,
-)
 
 
 @app.post("/api/consume")
