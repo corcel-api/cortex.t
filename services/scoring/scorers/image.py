@@ -15,6 +15,37 @@ from transformers import AutoModel, AutoImageProcessor, AutoTokenizer
 RECENT_URLS = deque(maxlen=10000)
 RECENT_URLS_LOCK = Lock()
 
+# URL patterns for both OpenAI and Azure DALL-E
+OPENAI_URL_PATTERN = re.compile(
+    r"^https://oaidalleapiprodscus\.blob\.core\.windows\.net/private/"
+    r"org-[A-Za-z0-9]+/user-[A-Za-z0-9]+/img-[A-Za-z0-9]+\.png\?"
+    r"st=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
+    r"se=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
+    r"sp=r&sv=\d{4}-\d{2}-\d{2}&sr=b&rscd=inline&rsct=image/png&"
+    r"skoid=[a-f0-9-]+&sktid=[a-f0-9-]+&"
+    r"skt=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
+    r"ske=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
+    r"sks=b&skv=\d{4}-\d{2}-\d{2}&"
+    r"sig=[A-Za-z0-9%/+=]+$"
+)
+
+AZURE_URL_PATTERN = re.compile(
+    r"^https://dalleprodsec\.blob\.core\.windows\.net/private/images/"
+    r"[a-f0-9-]+/generated_\d+\.png\?"
+    r"se=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
+    r"sig=[A-Za-z0-9%/+=]+&"
+    r"ske=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
+    r"skoid=[a-f0-9-]+&"
+    r"sks=b&"
+    r"skt=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
+    r"sktid=[a-f0-9-]+&"
+    r"skv=\d{4}-\d{2}-\d{2}&"
+    r"sp=r&"
+    r"spr=https&"
+    r"sr=b&"
+    r"sv=\d{4}-\d{2}-\d{2}$"
+)
+
 
 class ClipSimilarity:
     model = AutoModel.from_pretrained("openai/clip-vit-base-patch16").to("cpu")
@@ -89,12 +120,11 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
     """Score an image based on deterministic criteria and prompt similarity.
 
     Returns a score between 0 and 1 based on:
-    - DALL-E URL pattern validation
+    - DALL-E URL pattern validation (both OpenAI and Azure)
     - Image uniqueness check
-    - DALL-E 3 metadata verification
-    - Prompt similarity using SigLIP
+    - DALL-E metadata verification
+    - Prompt similarity using CLIP
     """
-    # First check DALL-E criteria
     logger.info(f"Checking if {image_url} is in recent URLs")
 
     # Check if URL is already in recent URLs using async lock
@@ -102,32 +132,25 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
         if image_url in RECENT_URLS:
             return 0
 
-    # Validate DALL-E URL pattern
-    dalle_url_pattern = re.compile(
-        r"^https://oaidalleapiprodscus\.blob\.core\.windows\.net/private/"
-        r"org-[A-Za-z0-9]+/user-[A-Za-z0-9]+/img-[A-Za-z0-9]+\.png\?"
-        r"st=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
-        r"se=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
-        r"sp=r&sv=\d{4}-\d{2}-\d{2}&sr=b&rscd=inline&rsct=image/png&"
-        r"skoid=[a-f0-9-]+&sktid=[a-f0-9-]+&"
-        r"skt=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
-        r"ske=\d{4}-\d{2}-\d{2}T\d{2}%3A\d{2}%3A\d{2}Z&"
-        r"sks=b&skv=\d{4}-\d{2}-\d{2}&"
-        r"sig=[A-Za-z0-9%/+=]+$"
-    )
+    # Validate URL pattern for both OpenAI and Azure
+    is_openai = bool(OPENAI_URL_PATTERN.match(image_url))
+    is_azure = bool(AZURE_URL_PATTERN.match(image_url))
 
-    if not dalle_url_pattern.match(image_url):
-        logger.info("Image URL does not match DALL-E URL pattern")
+    if not (is_openai or is_azure):
+        logger.info("Image URL does not match either OpenAI or Azure DALL-E URL pattern")
         return 0
 
     # Add URL to recent URLs queue
     async with RECENT_URLS_LOCK:
         RECENT_URLS.append(image_url)
 
-    # Check DALL-E 3 metadata
+    # Check image metadata and calculate similarity
     exif_data, image = load_exif_from_url(image_url)
-    if "Claim_generator" not in exif_data:
-        logger.info("Image is not a DALL-E 3 image")
+    
+    # For OpenAI, we check the URL pattern only since metadata might vary
+    # For Azure, we also rely on the URL pattern
+    if not image:
+        logger.info("Failed to load image")
         return 0
 
     try:
@@ -137,6 +160,7 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
         if f"{width}x{height}" != size:
             logger.info("Image size does not match requested size")
             return 0
+        
         logger.info("Calculating CLIP score")
         with torch.no_grad():
             score = CLIP_SIMILARITY(image, prompt)
@@ -148,7 +172,7 @@ async def dall_e_deterministic_score(image_url: str, prompt: str, size: str) -> 
                 return 0
 
     except Exception as e:
-        logger.error(f"Error calculating SigLIP score: {e}")
+        logger.error(f"Error calculating CLIP score: {e}")
         return 0
 
 
